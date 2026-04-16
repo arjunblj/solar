@@ -96,6 +96,12 @@ def main() -> int:
     expected_path = Path(args.expected)
 
     if args.write:
+        if os.getenv("GITHUB_ACTIONS"):
+            sys.stderr.write(
+                "[tier0-guard] Refusing to --write in CI. Run locally as a CODEOWNER:\n"
+                "  python3 scripts/pads/tier0-guard.py --write\n"
+            )
+            return 7
         expected_path.parent.mkdir(parents=True, exist_ok=True)
         expected_path.write_text(f"{actual}\n", encoding="utf-8")
         sys.stderr.write(f"[tier0-guard] Wrote hash {actual} to {expected_path}\n")
