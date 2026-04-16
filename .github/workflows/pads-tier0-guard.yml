@@ -1,0 +1,69 @@
+name: PADS Tier-0 guard
+
+on:
+  pull_request:
+    paths:
+      - 'PADS.md'
+      - '.pads/tier0.sha256'
+      - 'pads/**'
+      - 'scripts/pads/**'
+      - '.github/workflows/pads-tier0-guard.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  tier0-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PyYAML
+        run: python3 -m pip install --upgrade pyyaml
+
+      - name: Check human-approved label
+        id: approval
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh pr view "${{ github.event.pull_request.number }}" \
+             --repo "${{ github.repository }}" \
+             --json labels \
+             --jq '.labels[].name' | grep -qx 'human-approved'; then
+            echo "approved=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "approved=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify Tier-0 hash is unchanged
+        id: tier0
+        run: |
+          set -e
+          if [ ! -f PADS.md ]; then
+            echo "No PADS.md at repo root — nothing to guard."
+            exit 0
+          fi
+          python3 scripts/pads/tier0-guard.py --spec PADS.md --expected .pads/tier0.sha256
+
+      - name: Enforce append-only regions
+        run: |
+          python3 scripts/pads/append-only-guard.py \
+            --range "origin/${{ github.event.pull_request.base.ref }}...HEAD"
+
+      - name: Escalate when Tier-0 changed without human approval
+        if: failure() && steps.approval.outputs.approved != 'true'
+        run: |
+          echo "::error::Tier-0 drift detected and this PR is not labeled human-approved."
+          echo "A CODEOWNER must review, label the PR human-approved, and re-run after regenerating .pads/tier0.sha256."
+          exit 1
