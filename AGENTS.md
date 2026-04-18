@@ -6,6 +6,27 @@ Guidance for AI coding agents working in this repository.
 
 Solar is a blazingly fast, modular Solidity compiler written in Rust, aiming to be a modern alternative to solc.
 
+## Bootstrap
+
+Before any non-trivial local or sandboxed work, initialize the repo and toolchain explicitly:
+
+```bash
+git submodule update --init --checkout
+rustup toolchain install 1.88.0 nightly
+rustup component add clippy rustfmt --toolchain 1.88.0
+rustup component add clippy rustfmt --toolchain nightly
+cargo install --locked cargo-nextest typos-cli cargo-docs-rs
+cargo install cargo-hack cargo-codspeed
+python3 scripts/pads/spec-sync.py --write
+python3 scripts/pads/tier0-guard.py --write
+```
+
+For true differential or perf work against solc, provide a pinned local compiler:
+
+```bash
+export SOLC=/path/to/solc-0.8.31
+```
+
 ## Commands
 
 ```bash
@@ -18,6 +39,8 @@ cargo clippy --workspace --all-targets           # Lint
 cargo run -- file.sol                            # Run compiler
 cargo run -- -Zhelp                              # Unstable flags help
 ```
+
+The `testdata/solidity` submodule is required for corpus-backed test modes. `TESTER_MODE=solc-solidity` and `TESTER_MODE=solc-yul` are strong corpus oracles, but they are not a substitute for running against a real `solc` binary when claiming differential parity.
 
 ## Architecture
 

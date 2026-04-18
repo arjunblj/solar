@@ -99,6 +99,32 @@ Or build Solar from source:
     cargo install --locked --path crates/solar
     ```
 
+### Contributor bootstrap
+
+If you are working from a git checkout, bootstrap the workspace before relying on local test or benchmark results:
+
+```bash
+git submodule update --init --checkout
+rustup toolchain install 1.88.0 nightly
+rustup component add clippy rustfmt --toolchain 1.88.0
+rustup component add clippy rustfmt --toolchain nightly
+cargo install --locked cargo-nextest typos-cli cargo-docs-rs
+cargo install cargo-hack cargo-codspeed
+```
+
+For true differential/performance checks against solc, point Solar at a pinned local compiler:
+
+```bash
+export SOLC=/path/to/solc-0.8.31
+```
+
+If you are editing the Pads spec files, keep the canonical JSON and Tier-0 hash in sync:
+
+```bash
+python3 scripts/pads/spec-sync.py --write
+python3 scripts/pads/tier0-guard.py --write
+```
+
 Once installed, check out the available options:
 
 ```bash
