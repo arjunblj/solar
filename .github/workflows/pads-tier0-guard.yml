@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'PADS.md'
+      - '.pads/spec.json'
       - '.pads/tier0.sha256'
       - 'scripts/pads/**'
       - '.github/workflows/pads-tier0-guard.yml'
@@ -26,6 +27,9 @@ jobs:
           python-version: '3.12'
 
       - run: python3 -m pip install --upgrade pyyaml
+
+      - name: Verify PADS markdown/json sync
+        run: python3 scripts/pads/spec-sync.py --spec PADS.md --json .pads/spec.json
 
       - name: Verify Tier-0 hash
         run: python3 scripts/pads/tier0-guard.py --spec PADS.md --expected .pads/tier0.sha256

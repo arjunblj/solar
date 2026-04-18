@@ -43,7 +43,7 @@ tier0:
     shutdown_timer: { wall_clock_days: 7 }
 
   edit_rules:
-    - Tier-0 is human-only. Requires atomic update of PADS.md + .pads/tier0.sha256.
+    - Tier-0 is human-only. Requires atomic update of PADS.md + .pads/spec.json + .pads/tier0.sha256.
     - Tier-1 edits need critic-agent review + human approval.
     - System memory (lessons, rejected ideas, rules, status) lives in the pads platform, not in this repo.
 
