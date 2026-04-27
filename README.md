@@ -155,16 +155,17 @@ solar $(forge re) src/Contract.sol
 ## Roadmap
 
 You can find a more detailed list in the [pinned GitHub issue](https://github.com/paradigmxyz/solar/issues/1).
+Today, Solar is most complete as a Solidity frontend, with the core parsing pipeline in place and semantic coverage still expanding.
 
-- [ ] Front-end
+- [ ] Frontend parity
   - [x] Lexing
   - [x] Parsing
   - [ ] Semantic analysis
     - [x] Symbol resolution
-    - [ ] Type checker
+    - [ ] Type checker coverage
     - [ ] Static analysis
-- [ ] Middle-end
-- [ ] Back-end
+- [ ] Mid-level IR and later compiler stages
+- [ ] EVM back-end/codegen
 
 ## Semver Compatibility
 
