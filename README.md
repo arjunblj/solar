@@ -155,7 +155,7 @@ solar $(forge re) src/Contract.sol
 ## Roadmap
 
 You can find a more detailed list in the [pinned GitHub issue](https://github.com/paradigmxyz/solar/issues/1).
-Today, Solar is most complete as a Solidity frontend, with the core parsing pipeline in place and semantic coverage still expanding.
+Today, Solar is strongest as a Solidity frontend: lexing, parsing, diagnostics, semantic-analysis foundations, and ABI output are in place. The remaining roadmap work is about expanding type-checker coverage and building unfinished pieces such as Yul lowering and later compiler stages.
 
 - [ ] Frontend parity
   - [x] Lexing
