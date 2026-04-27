@@ -8,7 +8,7 @@
 [![Telegram Chat](https://img.shields.io/endpoint?color=neon&logo=telegram&label=chat&url=https%3A%2F%2Ftg.sumanjay.workers.dev%2Fparadigm%5Fsolar)][tg-url]
 
 Blazingly fast, modular, contributor-friendly Solidity compiler frontend, written in Rust.
-Today, Solar is strongest as a frontend compiler: lexing, parsing, diagnostics, semantic analysis, and ABI output are the most mature parts of the project. Inline assembly/Yul lowering, mid-level IR work, and EVM codegen are still in progress.
+Today, Solar is strongest in the frontend pipeline: lexing, parsing, diagnostics, semantic analysis foundations, and ABI output are the most mature parts of the project. Broader type-checker coverage, inline assembly/Yul lowering, MIR work, and EVM codegen are still in progress.
 
 <p align="center">
     <picture align="center">
