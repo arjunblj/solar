@@ -44,7 +44,7 @@ If you're new to the project, pick the section that matches how you plan to use 
 - Use **Binary usage** if you want the `solar` command-line tool.
 - Use **Contributor bootstrap** only if you're working from a git checkout and need local development tooling.
 
-### Library usage
+### Use Solar as a library
 
 You can add Solar to your Rust project by adding the following to your `Cargo.toml`:
 
@@ -61,7 +61,7 @@ cargo add "solar-compiler@=0.1.8" --rename solar --no-default-features
 
 You can see examples of how to use Solar as a library in the [examples](/examples) directory.
 
-### Binary usage
+### Install the CLI
 
 Pre-built binaries are available for macOS, Linux and Windows on the [releases page](https://github.com/paradigmxyz/solar/releases)
 and can be installed with the following commands:
@@ -105,7 +105,35 @@ Or build Solar from source:
     cargo install --locked --path crates/solar
     ```
 
-### Contributor bootstrap
+### Try the CLI
+
+Once installed, check out the available options:
+
+```bash
+solar -h
+```
+
+Here are a few examples:
+
+```bash
+# Compile a single file and emit ABI to stdout.
+solar Counter.sol --emit abi
+
+# Compile a contract through standard input (`-` file).
+echo "contract C {}" | solar -
+solar - <<EOF
+contract HelloWorld {
+    function helloWorld() external pure returns (string memory) {
+        return "Hello, World!";
+    }
+}
+EOF
+
+# Compile a file with a Foundry project's remappings.
+solar $(forge re) src/Contract.sol
+```
+
+### Set up a contributor checkout
 
 If you are working from a git checkout, bootstrap the workspace before relying on local test or benchmark results:
 
@@ -129,32 +157,6 @@ If you are editing the Pads spec files, keep the canonical JSON and Tier-0 hash 
 ```bash
 python3 scripts/pads/spec-sync.py --write
 python3 scripts/pads/tier0-guard.py --write
-```
-
-Once installed, check out the available options:
-
-```bash
-solar -h
-```
-
-Here's a few examples:
-
-```bash
-# Compile a single file and emit ABI to stdout.
-solar Counter.sol --emit abi
-
-# Compile a contract through standard input (`-` file).
-echo "contract C {}" | solar -
-solar - <<EOF
-contract HelloWorld {
-    function helloWorld() external pure returns (string memory) {
-        return "Hello, World!";
-    }
-}
-EOF
-
-# Compile a file with a Foundry project's remappings.
-solar $(forge re) src/Contract.sol
 ```
 
 ## Roadmap
