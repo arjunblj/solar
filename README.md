@@ -47,7 +47,7 @@ You can add Solar to your Rust project by adding the following to your `Cargo.to
 solar = { version = "=0.1.8", package = "solar-compiler", default-features = false }
 ```
 
-Or through the CLI:
+Or add the same dependency with `cargo add`:
 
 ```bash
 cargo add "solar-compiler@=0.1.8" --rename solar --no-default-features
