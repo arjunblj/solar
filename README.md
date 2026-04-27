@@ -7,7 +7,8 @@
 [![Actions Status](https://github.com/paradigmxyz/solar/workflows/CI/badge.svg)](https://github.com/paradigmxyz/solar/actions)
 [![Telegram Chat](https://img.shields.io/endpoint?color=neon&logo=telegram&label=chat&url=https%3A%2F%2Ftg.sumanjay.workers.dev%2Fparadigm%5Fsolar)][tg-url]
 
-Blazingly fast, modular, contributor-friendly Solidity frontend and compiler toolkit, written in Rust.
+Blazingly fast, modular, contributor-friendly Solidity frontend compiler, written in Rust.
+Today, Solar is strongest in the frontend pipeline: lexing, parsing, diagnostics, semantic analysis, and ABI output.
 
 <p align="center">
     <picture align="center">
@@ -19,16 +20,14 @@ Blazingly fast, modular, contributor-friendly Solidity frontend and compiler too
 
 > [!CAUTION]
 > Solar is under active development and is not yet feature complete.
-> Today, Solar is strongest as a frontend for parsing, diagnostics, semantic analysis work, and ABI generation.
-> Full Yul lowering, code generation, and the broader backend pipeline are still in progress.
-> Use it to speed up development workflows and tooling, not as a drop-in replacement for `solc` in every setting.
+> Use it to speed up your development workflows and tooling.
 > Please do not use it in production environments.
 
 - ⚡ Instant compiles and low memory usage ([benchmarks](./benches))
 - 🔍 Expressive and useful diagnostics
 - 🧩 Modular, library-based architecture
 - 💻 Simple and hackable code base
-- 🔄 Tracks the latest Solidity breaking language version (0.8.*) across the implemented frontend surface
+- 🔄 Compatibility with the latest Solidity language breaking version (0.8.*)
 
 <p align="center">
     <picture align="center">
@@ -156,8 +155,6 @@ solar $(forge re) src/Contract.sol
 ## Roadmap
 
 You can find a more detailed list in the [pinned GitHub issue](https://github.com/paradigmxyz/solar/issues/1).
-
-Current work is centered on the frontend pipeline. Parsing and much of semantic analysis already exist, while type checking coverage is still expanding. Middle-end and back-end work, including code generation, remain future milestones.
 
 - [ ] Front-end
   - [x] Lexing
