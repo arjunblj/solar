@@ -7,8 +7,8 @@
 [![Actions Status](https://github.com/paradigmxyz/solar/workflows/CI/badge.svg)](https://github.com/paradigmxyz/solar/actions)
 [![Telegram Chat](https://img.shields.io/endpoint?color=neon&logo=telegram&label=chat&url=https%3A%2F%2Ftg.sumanjay.workers.dev%2Fparadigm%5Fsolar)][tg-url]
 
-Blazingly fast, modular, contributor-friendly Solidity frontend compiler, written in Rust.
-Today, Solar is strongest in the frontend pipeline: lexing, parsing, diagnostics, semantic analysis, and ABI output.
+Blazingly fast, modular, contributor-friendly Solidity compiler frontend, written in Rust.
+Today, Solar is strongest in the frontend pipeline: lexing, parsing, diagnostics, semantic analysis, and ABI output. Yul lowering and EVM codegen are still unfinished.
 
 <p align="center">
     <picture align="center">
