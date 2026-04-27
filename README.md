@@ -38,6 +38,12 @@ Blazingly fast, modular and contributor friendly Solidity compiler, written in R
 
 Solar is available through a command-line interface, or as a Rust library.
 
+If you're new to the project, pick the section that matches how you plan to use Solar:
+
+- Use **Library usage** if you want to embed Solar in a Rust project.
+- Use **Binary usage** if you want the `solar` command-line tool.
+- Use **Contributor bootstrap** only if you're working from a git checkout and need local development tooling.
+
 ### Library usage
 
 You can add Solar to your Rust project by adding the following to your `Cargo.toml`:
@@ -47,7 +53,7 @@ You can add Solar to your Rust project by adding the following to your `Cargo.to
 solar = { version = "=0.1.8", package = "solar-compiler", default-features = false }
 ```
 
-Or add the same dependency with `cargo add`:
+Or through the CLI:
 
 ```bash
 cargo add "solar-compiler@=0.1.8" --rename solar --no-default-features
