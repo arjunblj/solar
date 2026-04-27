@@ -155,7 +155,60 @@ impl<'gcx> TypeChecker<'gcx> {
                 self.check_binop(lhs_e, lhs, rhs_e, rhs, op, false)
             }
             hir::ExprKind::Call(callee, ref args, ref _opts) => {
-                let mut callee_ty = self.check_expr(callee);
+                let mut callee_ty = if let hir::ExprKind::Member(expr, ident) = &callee.kind {
+                    let expr_ty = self.check_expr(expr);
+                    if expr_ty.references_error() {
+                        expr_ty
+                    } else {
+                        let possible_members = self
+                            .gcx
+                            .members_of(expr_ty, self.source, self.contract)
+                            .iter()
+                            .filter(|m| m.name == ident.name)
+                            .collect::<SmallVec<[_; 4]>>();
+
+                        let ty = match possible_members[..] {
+                            [] => {
+                                let msg = format!(
+                                    "member `{ident}` not found on type `{}`",
+                                    expr_ty.display(self.gcx)
+                                );
+                                let err = self.dcx().err(msg).span(ident.span);
+                                self.gcx.mk_ty_err(err.emit())
+                            }
+                            [member] => member.ty,
+                            [..] => {
+                                let possible_members = possible_members
+                                    .into_iter()
+                                    .filter(|member| match member.ty.kind {
+                                        TyKind::FnPtr(f) => f.parameters.len() == args.len(),
+                                        TyKind::Event(param_tys, _)
+                                        | TyKind::Error(param_tys, _) => {
+                                            param_tys.len() == args.len()
+                                        }
+                                        _ => false,
+                                    })
+                                    .collect::<SmallVec<[_; 4]>>();
+                                match possible_members[..] {
+                                    [member] => member.ty,
+                                    [..] | [] => {
+                                        let msg = format!(
+                                            "member `{ident}` not unique on type `{}`",
+                                            expr_ty.display(self.gcx)
+                                        );
+                                        let err = self.dcx().err(msg).span(ident.span);
+                                        self.gcx.mk_ty_err(err.emit())
+                                    }
+                                }
+                            }
+                        };
+
+                        self.register_ty(callee, ty);
+                        ty
+                    }
+                } else {
+                    self.check_expr(callee)
+                };
 
                 // Get the function type for struct constructors, keeping struct_id for field names.
                 let struct_id = if let TyKind::Type(struct_ty) = callee_ty.kind
