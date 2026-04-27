@@ -23,11 +23,11 @@ Today, Solar is strongest as a frontend compiler: lexing, parsing, diagnostics, 
 > Use it to speed up your development workflows and tooling.
 > Please do not use it in production environments.
 
-- ⚡ Instant compiles and low memory usage ([benchmarks](./benches))
-- 🔍 Expressive and useful diagnostics
+- ⚡ Fast frontend compilation with low memory usage ([benchmarks](./benches))
+- 🔍 Expressive diagnostics for lexing, parsing, and supported semantic checks
 - 🧩 Modular, library-based architecture
 - 💻 Simple and hackable code base
-- 🔄 Compatibility with the latest Solidity language breaking version (0.8.*)
+- 🔄 Tracks current Solidity 0.8.x frontend work; broader semantic coverage and later pipeline stages are still in progress
 
 <p align="center">
     <picture align="center">
