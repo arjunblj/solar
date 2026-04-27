@@ -23,11 +23,11 @@ Today, Solar is strongest as a frontend compiler: lexing, parsing, diagnostics, 
 > Use it to speed up your development workflows and tooling.
 > Please do not use it in production environments.
 
-- ⚡ Fast frontend compilation with low memory usage ([benchmarks](./benches))
-- 🔍 Expressive diagnostics for lexing, parsing, and the semantic checks Solar implements today
+- ⚡ Fast Solidity frontend compilation with low memory usage ([benchmarks](./benches))
+- 🔍 Expressive diagnostics across lexing, parsing, and the semantic checks Solar implements today
 - 🧾 ABI output from the current frontend for supported contracts
 - 🧩 Modular, library-based architecture that is easy to embed in Rust tooling
-- 🔄 Focused on Solidity 0.8.x frontend parity today; Yul/inline assembly lowering, broader type-checking coverage, and later pipeline stages such as MIR and EVM codegen remain in progress
+- 🛠️ Built today around the Solidity frontend pipeline; broader type-checker coverage, Yul/inline assembly lowering, and later stages such as MIR and EVM codegen are still in progress
 
 <p align="center">
     <picture align="center">
