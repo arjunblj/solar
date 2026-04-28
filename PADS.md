@@ -68,32 +68,37 @@ corpora:
     source: foundry-rs/forge-std
     commit: pin-after-first-fetch
     phase: 3A
-    setup: ["forge build --build-info"]
+    setup: ["forge --version", "git rev-parse HEAD", "forge config --json", "forge remappings", "forge build --force --build-info --build-info-path out/build-info"]
     proves: ["Foundry project layout", "remappings", "basic production imports"]
+    does_not_prove: ["Solar correctness", "Standard JSON parity", "runtime equivalence"]
   - id: openzeppelin-contracts
     source: OpenZeppelin/openzeppelin-contracts
     commit: pin-after-first-fetch
     phase: 3B
-    setup: ["npm ci", "npm run compile"]
+    setup: ["npm ci", "npm run compile", "extract artifacts/build-info/*.json"]
     proves: ["inheritance", "interfaces", "proxies", "custom errors", "storage layout"]
+    does_not_prove: ["Solar correctness until Solar can replay Standard JSON inputs"]
   - id: solady
     source: Vectorized/solady
     commit: pin-after-first-fetch
     phase: 3C
-    setup: ["forge build --build-info"]
+    setup: ["forge build --force --build-info --build-info-path out/build-info"]
     proves: ["inline assembly", "modern opcodes", "gas-sensitive library code"]
+    does_not_prove: ["Solar runtime correctness until Solar emits bytecode and a runtime oracle passes"]
   - id: prb-math
     source: PaulRBerg/prb-math
     commit: pin-after-first-fetch
     phase: 3B
-    setup: ["forge build --build-info"]
+    setup: ["forge build --force --build-info --build-info-path out/build-info"]
     proves: ["UDVTs", "fixed-point arithmetic", "custom errors"]
+    does_not_prove: ["Solar correctness until Standard JSON replay exists"]
   - id: uniswap-v4-core
     source: Uniswap/v4-core
     commit: pin-after-first-fetch
     phase: 3C
-    setup: ["forge build --build-info"]
+    setup: ["forge build --force --build-info --build-info-path out/build-info"]
     proves: ["modern Foundry profiles", "hooks", "transient-storage-era code", "viaIR pressure"]
+    does_not_prove: ["Solar runtime correctness until Solar bytecode can be compared and executed"]
 
 branch_policy:
   default_upstream_mode: reference_only
@@ -105,7 +110,7 @@ branch_policy:
       upstream_ref: feat/codegen-mir
       mode: extract
       priority: critical
-      related: ["paradigmxyz/solar#693", "paradigmxyz/solar#687", "paradigmxyz/solar#704"]
+      related: ["paradigmxyz/solar#693", "paradigmxyz/solar#749", "paradigmxyz/solar#687", "paradigmxyz/solar#704"]
       notes: "Reference branch for MIR/codegen architecture; never blind merge."
     - id: typeck-solc-corpus
       source: paradigmxyz/solar
@@ -375,6 +380,54 @@ Passing a lower tier only proves that tier. Do not overclaim.
 | 9 | fuzz and metamorphic transforms | unknown-unknown discovery |
 | 10 | SMT/translation validation for rewrites | proof-level optimizer correctness |
 
+## Foundry Oracle Rules
+
+Use Foundry when the claim is about project ingestion, remappings, build-info, Standard JSON compatibility, artifact shape, or runtime behavior through Forge tests. Do not use Foundry as a shortcut around Solar's own UI, solc corpus, Standard JSON, bytecode, or runtime gates.
+
+Foundry oracle tiers:
+
+| Tier | Command Shape | Proves | Does Not Prove |
+| --- | --- | --- | --- |
+| F0 | `forge build --build-info` with solc | corpus pins, project config, remappings, profiles, build-info capture | Solar correctness |
+| F1 | `solar --base-path . $(forge remappings) <files>` | Solar can ingest Foundry-style imports and frontend files | Standard JSON, bytecode, runtime |
+| F2 | `solar --standard-json < build-info-input.json` | solc-compatible Standard JSON input/output subset | deployed bytecode behavior unless bytecode outputs exist |
+| F3 | `FOUNDRY_SOLC=.../solar forge build/test` | Foundry can invoke Solar as a compiler and consume artifacts | semantic equivalence outside tested paths |
+| F4 | Solar-vs-solc Forge test comparison | runtime behavior for covered tests, gas/bytecode comparison under exact settings | full compiler equivalence |
+
+Common corpus capture command for Foundry projects:
+
+```bash
+forge --version
+git rev-parse HEAD
+forge config --json
+forge remappings
+forge build --force --build-info --build-info-path out/build-info --ast --extra-output metadata --extra-output storageLayout
+```
+
+Before `--standard-json` exists on main, Foundry corpora are frontend pressure only:
+
+```bash
+cargo build --workspace
+solar --base-path . $(forge remappings) $(git ls-files '*.sol' ':!:test/**' ':!:script/**') -Ztypeck
+```
+
+Once Standard JSON is extracted from `feat/codegen-mir`, replay build-info inputs:
+
+```bash
+jq '.input' out/build-info/<id>.json > /tmp/input.json
+solc --standard-json < /tmp/input.json > /tmp/solc-output.json
+solar --standard-json < /tmp/input.json > /tmp/solar-output.json
+```
+
+Once bytecode emit exists, compare Solar and solc through Foundry only with exact settings, fixed library addresses, and metadata normalization:
+
+```bash
+FOUNDRY_SOLC="$PWD/target/debug/solar" forge test --force --json -vvvvv --decode-internal --out out-solar --cache-path cache-solar
+forge test --force --json -vvvvv --decode-internal --out out-solc --cache-path cache-solc
+```
+
+gakonst's comment on PR `#749` is the correctness target: the ideal harness compiles tests with solc, compiles only the contract-under-test with Solar, deploys Solar bytecode via `vm.deployCode` or an equivalent dynamic-link path, then compares return data, reverts, logs, state changes, and gas. `FOUNDRY_SOLC=solar` is a useful smoke test, not the final equivalence oracle.
+
 ## Upstream Policy
 
 Always check upstream before selecting work.
@@ -394,6 +447,24 @@ Branch strategy:
 - Cherry-pick small fixes only when the diff is narrow, current, and comes with or can receive tests.
 - Do not merge `feat/codegen-mir` wholesale into `main`; extract a dependency-ordered integration branch and land reviewable slices.
 - Ignore stale WIP branches unless a task cites an exact commit and a verification plan.
+
+### gakonst / Foundry / Codegen Branch Policy
+
+`paradigmxyz/solar:feat/codegen-mir` / PR `#693` is reference-only. It contains Standard JSON, Foundry fixtures, MIR, HIR-to-MIR, EVM codegen, stack scheduling, assembler, validators, pass-manager work, and optimizer passes. It also contains generated/noisy artifacts and broad side quests. Extract, do not merge.
+
+Extraction order:
+
+1. Standard JSON input/output surface for Foundry compatibility.
+2. Minimal Foundry build-info replay fixtures.
+3. MIR data model, text format, parser/printer, validator, and `solar-mir-opt`.
+4. `--emit=mir` and MIR UI mode.
+5. HIR-to-MIR lowering slices.
+6. Stack scheduler, assembler, and minimal bytecode emit.
+7. Solar-vs-solc bytecode diff harness.
+8. Foundry runtime harness using mixed compilation, not just `FOUNDRY_SOLC=solar`.
+9. Optimizer passes only after runtime gates exist.
+
+Never import generated `out-*`, `cache-*`, vendored `forge-std` or `solmate` copies, benchmark images, broad workflow changes, or testdata submodule rewrites without human review. Every extraction PR must name source commit hashes, omitted commits, and the oracle tier it satisfies.
 
 ## Work Selection Rules
 
