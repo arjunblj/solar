@@ -17,9 +17,13 @@ rustup component add clippy rustfmt --toolchain 1.88.0
 rustup component add clippy rustfmt --toolchain nightly
 cargo install --locked cargo-nextest typos-cli cargo-docs-rs
 cargo install cargo-hack cargo-codspeed
-python3 scripts/pads/spec-sync.py --write
-python3 scripts/pads/tier0-guard.py --write
+python3 -m pip install --user -r scripts/pads/requirements.txt
+python3 scripts/pads/spec-sync.py
+python3 scripts/pads/tier0-guard.py
 ```
+
+Sandboxed agents should run `bash .pads/setup.sh` when present; it performs the same
+bootstrap idempotently and keeps `PADS.md` as the source of truth.
 
 For true differential or perf work against solc, provide a pinned local compiler:
 

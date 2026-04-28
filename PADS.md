@@ -14,7 +14,7 @@ tier0:
       (aegraphs, translation validation, superoptimization, metamorphic
       fuzz, LLM rewrite-rule synthesis) where it makes sense.
     upstream: { full_name: paradigmxyz/solar, policy: reference_only }
-    baseline_commit: 2140f36
+    baseline_commit: 3a06d90
 
   hard_constraints:
     - Never edit files under testdata/solidity/ — pinned community submodule.
@@ -29,33 +29,39 @@ tier0:
     permitted_subgoals:
       - advance any active track
       - port solc syntax tests into tests/ui/
+      - build production Solidity correctness corpora
+      - import or cherry-pick upstream branches after explicit branch analysis
       - open PRs within preset blast-radius caps
       - land research prototypes under research/
     permitted_side_effects:
       max_files_per_pr: 20
       max_crates_per_pr: 2
-      max_wall_time_per_task_min: 60
-      max_api_spend_per_task_usd: 5
+      max_wall_time_per_task_min: 120
+      max_api_spend_per_task_usd: 20
     must_pause_for_approval:
       - .github/workflows/**
       - testdata/solidity/**
       - new crate, new IR, or new pass pipeline proposals
-    shutdown_timer: { wall_clock_days: 7 }
+    shutdown_timer: { wall_clock_days: 90 }
 
   edit_rules:
-    - Tier-0 is human-only. Requires atomic update of PADS.md + .pads/spec.json + .pads/tier0.sha256.
+    - PADS.md is the source of truth; .pads/spec.json is only a generated mirror.
+    - Tier-0 is human-only. Requires atomic update of PADS.md + generated .pads/spec.json + .pads/tier0.sha256.
     - Tier-1 edits need critic-agent review + human approval.
     - System memory (lessons, rejected ideas, rules, status) lives in the pads platform, not in this repo.
 
 oracles:
-  - { id: cargo.build,       kind: shell, tier: prerequisite, command: "cargo build --workspace" }
-  - { id: cargo.nextest,     kind: shell, tier: gate,         command: "cargo nextest run --workspace" }
-  - { id: cargo.uitest,      kind: shell, tier: gate,         command: "cargo uitest" }
-  - { id: cargo.clippy,      kind: shell, tier: gate,         command: "cargo clippy --workspace --all-targets -- -D warnings" }
-  - { id: cargo.fmt,         kind: shell, tier: gate,         command: "cargo +nightly fmt --all --check" }
-  - { id: solc_syntax_tests, kind: shell, tier: gate,         command: "TESTER_MODE=solc-solidity cargo nextest run -p solar-tester" }
-  - { id: solc_yul_tests,    kind: shell, tier: gate,         command: "TESTER_MODE=solc-yul cargo nextest run -p solar-tester" }
-  - { id: codspeed_check,    kind: shell, tier: advisory,     command: "cargo codspeed build && cargo codspeed run" }
+  - { id: cargo.check,           kind: shell, tier: prerequisite, command: "cargo check --workspace" }
+  - { id: cargo.build,           kind: shell, tier: prerequisite, command: "cargo build --workspace" }
+  - { id: cargo.nextest,         kind: shell, tier: gate,         command: "cargo nextest run --workspace" }
+  - { id: cargo.uitest,          kind: shell, tier: gate,         command: "cargo uitest" }
+  - { id: cargo.clippy,          kind: shell, tier: gate,         command: "cargo clippy --workspace --all-targets -- -D warnings" }
+  - { id: cargo.fmt,             kind: shell, tier: gate,         command: "cargo +nightly fmt --all --check" }
+  - { id: typos,                 kind: shell, tier: prerequisite, command: "typos --format brief" }
+  - { id: solc_syntax_parser,    kind: shell, tier: gate,         command: "TESTER_MODE=solc-solidity cargo nextest run -p solar-compiler --test tests" }
+  - { id: solc_yul_parser,       kind: shell, tier: gate,         command: "TESTER_MODE=solc-yul cargo nextest run -p solar-compiler --test tests" }
+  - { id: solar_tester_unit,     kind: shell, tier: gate,         command: "cargo test -p solar-tester" }
+  - { id: codspeed_check,        kind: shell, tier: advisory,     command: "cargo codspeed build && cargo codspeed run" }
 
 tracks:
   - { id: typeck,               name: Type checker,                 priority: high,     status: active, scope: ["crates/sema/src/typeck/**"], upstream_tracking: ["paradigmxyz/solar#615"] }
@@ -69,203 +75,354 @@ tracks:
   - { id: lsp,                  name: LSP,                          priority: low,      status: draft,  scope: ["crates/lsp/**"], upstream_tracking: ["paradigmxyz/solar#394"] }
   - { id: research-sota,        name: Novel SOTA research,          priority: research, status: active, scope: ["research/**"] }
 
-priority_order: [typeck, yul-hir, testing-infra, diagnostics, codegen-mir, bytecode-equivalence, performance, research-sota, fuzz-hardening, lsp]
+priority_order: [testing-infra, diagnostics, typeck, yul-hir, codegen-mir, bytecode-equivalence, fuzz-hardening, performance, research-sota, lsp]
+
+starter_tasks:
+  - title: Import the active upstream branch map into the frontier
+    description: >
+      Inspect upstream paradigmxyz/solar branches and open PRs, especially
+      feat/codegen-mir, onbjerg/lsp-scaffolding, #737, #754, and #755. Produce
+      execution-ready slices that say whether to import, cherry-pick, track, or
+      ignore each branch before writing code.
+    expected_output: >
+      A branch strategy artifact plus independent implementation tasks for any
+      safe cherry-picks or branch-extraction work.
+    track_id: testing-infra
+    task_type: research
+    reference_ids: ["paradigmxyz/solar#693", "paradigmxyz/solar#737", "paradigmxyz/solar#754", "paradigmxyz/solar#755"]
+    reference_only: true
+    verification_hint: "gh pr view / git compare evidence; no code changes"
+  - title: Establish production Solidity correctness corpora
+    description: >
+      Add the first production-corpus harness slice for OpenZeppelin, Solady,
+      PRBMath, forge-std, and Uniswap, using Foundry/build-info where possible
+      and direct Standard JSON comparison where Solar supports it. Do not claim
+      runtime correctness until Solar emits bytecode and the diff harness exists.
+    expected_output: >
+      One reviewable harness/corpus PR or a blocked artifact naming the exact
+      missing Solar interface and the next implementation slice.
+    track_id: testing-infra
+    task_type: implementation
+    reference_ids: ["OpenZeppelin/openzeppelin-contracts", "Vectorized/solady", "PaulRBerg/prb-math", "foundry-rs/forge-std", "Uniswap/v4-core"]
+    verification_hint: "cargo check --workspace; focused corpus command documented in PR"
+  - title: Expose more solc TypeError corpus through Solar typeck
+    description: >
+      Bring upstream #737's idea into this fork carefully: enable -Ztypeck for a
+      narrow category of solc syntax tests, keep failures measurable, and port
+      the first failing examples into owned tests/ui/typeck fixtures.
+    expected_output: >
+      A typeck/testing PR with before/after corpus counts and focused UI
+      fixtures; or an execution-ready set of smaller follow-up tasks.
+    track_id: typeck
+    task_type: implementation
+    reference_ids: ["paradigmxyz/solar#615", "paradigmxyz/solar#663", "paradigmxyz/solar#737"]
+    verification_hint: "cargo uitest; TESTER_MODE=solc-solidity cargo nextest run -p solar-compiler --test tests"
+  - title: Extract the codegen dependency graph from feat/codegen-mir
+    description: >
+      Treat upstream feat/codegen-mir as a reference branch, not a blind merge.
+      Identify the smallest sequence that lands MIR-only infrastructure,
+      validation, HIR-to-MIR lowering, liveness, phi elimination, stack
+      scheduling, and bytecode equivalence in reviewable order.
+    expected_output: >
+      A dependency graph plus the first importable PR slice; no codegen claim
+      without a bytecode/runtime oracle plan.
+    track_id: codegen-mir
+    task_type: research
+    reference_ids: ["paradigmxyz/solar#687", "paradigmxyz/solar#693", "paradigmxyz/solar#704"]
+    reference_only: true
+    verification_hint: "git compare feat/codegen-mir...main; cite commit hashes"
 ---
 
-# Solar
+# Solar Completion Program
 
-This is the soul of the Solar project. It tells you what we're building, why, how the codebase works, what the concrete next steps are for every track, and what the research frontier looks like. Read it as a comprehensive brief from an eng manager to a team of contractors who are smart but have zero Solar-specific context.
+This document is the operating constitution for a long autonomous run whose goal is to complete Solar as a production-grade Solidity compiler. It is not a list of tiny starter edits. It tells the orchestrator how to reason, what to prove, where to look upstream, how to phase the work, and which evidence makes a PR worth opening.
 
-## The bet
+The run should start with no user mission. The mission is this file.
 
-Compiler work has **verifiable loops**. Unlike most software, a compiler has an unfakeable oracle: compile the same input with the reference compiler (solc) and the one under test (solar), diff the output. If they match, the change is correct. If they don't, the divergence is a concrete bug. This means an autonomous system can produce merge-worthy PRs over sustained runs — weeks, not hours — because every PR carries its own evidence.
+## North Star
 
-The end state: a Paradigm reviewer looks at a Solar PR and merges it unchanged, because the oracle evidence is already in the body.
+Solar becomes serious when it can compile real Solidity projects with solc-compatible behavior, expose a maintainable Rust compiler architecture, and produce upstreamable PRs whose evidence is strong enough that a Paradigm reviewer can merge them without asking basic follow-up questions.
 
-## Where Solar is today
+Correctness comes first. Performance is only meaningful once the compiler is proving the right behavior against solc, production contracts, and eventually runtime execution.
 
-Solar is ~39k LoC across 9 crates. The architecture is a near-carbon-copy of rustc's frontend: bumpalo arenas, `Gcx`/`GlobalCtxt`, `Interned<T>`, `IndexVec<Id, T>`, rustc-style diagnostics. The pipeline today is:
+## Orchestrator Handoff
 
+The orchestrator should treat this file as the mission and planning brief. Do not rely on an external run prompt. Do not optimize for "opened a PR." Optimize for a multi-month sequence of upstreamable changes that monotonically increases measured correctness.
+
+The first no-mission run should:
+
+1. Bootstrap the repo with `.pads/setup.sh`.
+2. Read this `PADS.md`, `AGENTS.md`, upstream `paradigmxyz/solar` issues/PRs/branches, and local fork diffs.
+3. Seed the frontier from `starter_tasks`, but refine them against current repo evidence before dispatching implementers.
+4. Start in Phase 0 and Phase 1. Do not dispatch codegen, bytecode-equivalence, or performance implementation work until the relevant correctness harnesses exist.
+5. Prefer fewer, larger, real PRs over tiny motion PRs. A meaty PR can be hundreds or thousands of lines if it is dependency-sliced, tested, and reviewable.
+6. Keep branch-import work explicit: reference branches first, integration branches second, cherry-picks only when small and tested.
+7. Preserve context. Every completed or blocked task should leave behind a frontier entry that names the next dependency, oracle, and files.
+
+The planner has freedom to choose the exact next slice. The boundaries are: correctness before performance; reference upstream but write only to this fork; every behavioral claim needs an oracle; and every PR should move Solar measurably closer to production Solidity compatibility.
+
+## Current State
+
+The fork is essentially upstream `main` plus Pads guardrails. Treat local fork state as authoritative. Treat `paradigmxyz/solar` issues, PRs, and branches as reference material unless explicitly imported into this fork.
+
+Mainline Solar today is mostly frontend:
+
+```text
+lexer -> parser -> AST -> HIR -> sema/typeck -> diagnostics/ABI output
 ```
-lexer → parser → AST → HIR → sema/typeck → diagnostics/ABI output
-```
 
-Codegen, Yul→HIR lowering, CFG, static analysis, and lint infrastructure are all future work. The `sema` crate has a `-Ztypeck` flag behind which the real type checker sits. The crate breakdown is roughly:
+What exists:
 
-- `solar-parse` (~8.3k LoC) — lexer and parser
-- `solar-ast` — AST definitions and visitors
-- `solar-sema` (~13.5k LoC) — semantic analysis, type checking, HIR
-- `solar-interface` (~8.6k LoC) — diagnostics and source management
-- `solar-config`, `solar-cli`, `solar-macros` — supporting crates
-- `tools/tester` — the corpus test runner (three modes: `Mode::Ui`, `Mode::SolcSolidity`, `Mode::SolcYul`)
+- `solar-parse`: lexer, parser, Yul parser, parser diagnostics.
+- `solar-ast`: AST definitions, visitors, JSON-ish emission surfaces.
+- `solar-sema`: resolver, semantic analysis, gated type checker.
+- `solar-interface`: source map, diagnostics, sessions.
+- `solar-cli`, `solar-config`, `solar-macros`, `solar-data-structures`.
+- `tools/tester`: UI and solc corpus runner.
+- `benches`: Criterion, CodSpeed, and iai-callgrind benchmark surfaces.
 
-**What's solid:** parser/lexer/AST fundamentals, diagnostics infrastructure, large parts of sema and typeck foundations, override checker and many conversion rules, UI test infrastructure, benchmark infrastructure.
+What is not yet mainline-complete:
 
-**What's open:** broader `-Ztypeck` coverage, NatSpec lowering, Yul/inline-assembly lowering, LSP, codegen (not yet in this fork), bytecode equivalence harness, stronger differential testing.
+- Broad `-Ztypeck` solc corpus exposure and semantic parity.
+- NatSpec and frontend emission parity.
+- Inline assembly / Yul lowering into HIR.
+- MIR, HIR-to-MIR lowering, EVM codegen, stack scheduling, assembler.
+- Bytecode equivalence harness.
+- Runtime equivalence through Foundry/Anvil/revm.
+- LSP built on stable typeck.
+- Production-corpus correctness and performance gates.
 
-## The oracle hierarchy
+## Phase Model
 
-This is how you prove a change is correct. Lower tiers are cheaper and faster; higher tiers are more expensive but provide stronger evidence. Gate a change on the **lowest tier that proves it**.
+The orchestrator should keep this ordering unless a blocker forces preparatory work.
 
-| Tier | What | Cost | Signal |
-|------|------|------|--------|
-| 0 | `cargo fmt`, `typos` | <5s | cosmetic |
-| 1 | `cargo check`, `clippy` | 10–120s | compiles + lints |
-| 2 | `cargo nextest run` | 30–180s | unit test correctness |
-| 3 | `cargo uitest` on owned fixtures | ~10s | diagnostics exactness |
-| 3' | `cargo uitest` against `testdata/solidity/` submodule | ~1 min | diagnostics on unownable corpus |
-| 4 | `solc_syntax_tests` — 3,551 error-code+span matches | 5–30 min | diagnostic coverage breadth |
-| 5 | AST JSON diff, ABI diff, NatSpec diff vs solc | 1–2 min | frontend emission shape |
-| 7 | Runtime bytecode diff solc vs solar | 1–10 min/contract | codegen correctness |
-| 8 | `revm` differential execution | ~30 min | end-to-end runtime agreement |
-| 9 | Grammar fuzz (Erwin, Solsmith, tree-crasher) | continuous | unknown-unknowns |
-| 10 | Metamorphic invariants (rename, whitespace, literal equivalence, optimizer idempotence) | 10–60 min | universal invariants |
-| 11 | `hevm` symbolic equivalence, Alive2-style pass proofs | minutes–hours | **proof** of equivalence |
+### Phase 0: Setup, Import Intelligence, And Measurement
 
-A parser error-message tweak = tier 3 in 10s. A MIR pass = tiers 7+8+10+11. A typeck slice = tier 4.
+Goal: make every future claim measurable.
 
-## solc as the behavioral oracle
+Required outcomes:
 
-`testdata/solidity/` is a git-submodule of the argotorg/solidity fork at a pinned SHA. `tools/tester` runs it in three modes. PR #737 enabled `-Ztypeck` for ~1,593 of the ~3,551 solc syntaxTests. Every merged typeck PR in Solar's history cites a specific solc error code and often a specific line in `libsolidity/analysis/TypeChecker.cpp` by commit SHA. Follow that pattern.
+- Sandbox setup reliably initializes Rust, `cargo-nextest`, `typos`, PADS guards, and the pinned `testdata/solidity` submodule.
+- The run imports upstream issue/branch intelligence into the Pads frontier.
+- Corpus commands point at the correct package and test target.
+- Production corpora are cloned, cached, and smoke-compiled in a way the orchestrator can shard later.
+- The first PRs may be harness/setup PRs, but they must unlock stronger evidence.
 
-Green Solar tests do not imply full solc parity. Parser-only corpus modes do not prove runtime correctness. The `TESTER_MODE=solc-solidity` run is primarily a parser/corpus oracle unless explicit `-Ztypeck` routing is enabled for the relevant semantic family.
+Do not skip this phase. If the harness cannot measure correctness, implementation PRs will become motion.
 
-## Relationship to upstream
+### Phase 1: Frontend Correctness
 
-`paradigmxyz/solar` is reference material — roadmap issues ([#1](https://github.com/paradigmxyz/solar/issues/1), [#615](https://github.com/paradigmxyz/solar/issues/615), [#687](https://github.com/paradigmxyz/solar/issues/687)), merged history, open PRs, docs and testing patterns. If a branch or PR isn't merged into **this fork**, it doesn't exist here. `feat/codegen-mir` (PR #693) is reference-only. The `E-easy` label is essentially drained (only #305, S-blocked); the real frontier is `E-medium`/`E-hard`.
+Goal: make Solar credible on parse, diagnostics, AST, ABI, NatSpec, and semantic/type checking before claiming full compiler correctness.
 
-## Track-by-track guide
+Workstreams:
 
-### Typeck — close the TODOs (primary, highest leverage)
+- Parser and diagnostics parity against owned UI fixtures and solc parser corpus.
+- Type checker parity under `-Ztypeck`, centered on `paradigmxyz/solar#615`, `#663`, and PR `#737` as reference.
+- Diagnostic quality ports from solc error codes into Solar `error_code!(NNNN)` plus fixtures.
+- AST / ABI / NatSpec Standard JSON parity for selected contracts.
+- Skip-list reduction in `tools/tester/src/solc/solidity.rs` and `tools/tester/src/solc/yul.rs`.
 
-Issue [#615](https://github.com/paradigmxyz/solar/issues/615). The active human focus with the strongest built-in oracles.
+Representative meaty PRs:
 
-**Concrete backlog** from `crates/sema/src/typeck/checker.rs`: L327 overload resolution, L335 "Did you mean...", L465 constant `expected.mobile`, L544/L615 custom operators, L1403 internal function pointer comparison, L1447 `super` disallow, plus solc line-number references at L713, L1219, L1421, L1583.
+- Enable one category of solc TypeError tests under `-Ztypeck`, keep counts, and port owned UI fixtures for the first gaps.
+- Implement argument-aware overload resolution with fixtures for ambiguous calls, named args, and member overloads.
+- Implement call-kind parity for array `push`, call options, and `require(cond, CustomError(...))`.
+- Add an AST/NatSpec parity harness for a small stable corpus and fix the first local emission mismatch.
 
-**Shape:** each TODO = 1 PR, ~200–800 LoC. Cite the solc error code + the exact line in `libsolidity/analysis/TypeChecker.cpp`. Ship with `cargo uitest` fixtures under `tests/ui/typeck/`. Oracle: `cargo nextest` + `cargo uitest` + `solc_syntax_tests` pass rate delta.
+### Phase 2: Yul, HIR, MIR, Codegen, And Runtime Correctness
 
-### Yul → HIR lowering (primary, parallel with typeck)
+Goal: get from frontend correctness to executable EVM output with a proof path.
 
-Issue [#415](https://github.com/paradigmxyz/solar/issues/415) (P-high, E-hard). Currently `hir::StmtKind::Assembly` is commented out at `crates/sema/src/hir/mod.rs` L1163–1165 — inline assembly silently disappears from HIR.
+Reference branch:
 
-**Shape:** decompose by Yul statement kind, one PR each: `let`, `assign`, `if`, `for`, `switch`, `break`, `continue`, `leave`, `functionDef`, `expr`. Oracle: `cargo uitest` on new `tests/ui/yul-hir/` fixtures + `solc_yul_tests` pass rate. dipanshuhappy's draft [#652](https://github.com/paradigmxyz/solar/pull/652) has the open design questions.
+- `paradigmxyz/solar:feat/codegen-mir` / PR `#693` is the major codegen branch. It is not a blind merge target. It is a reference branch to extract architecture and reviewable slices from.
+- PR `#749` was merged into `feat/codegen-mir`, not `main`. Account for that branch reality.
 
-### Testing infra (primary, continuous)
+Dependency order:
 
-Port more solc syntaxTests under `-Ztypeck` (mirror PR [#737](https://github.com/paradigmxyz/solar/pull/737) per category: `nameAndTypeResolution/`, `abiEncoderV2/`, `inheritance/`, `modifiers/`, `structs/`, `immutable/`, etc.). Each PR: 5–15 new `tests/ui/typeck/<category>/*.sol` with `//~ ERROR: TypeError NNNN` annotations ported from solc's footer format. Oracle: `cargo uitest` + `solc_syntax_tests` pass rate tick.
+1. Yul/inline assembly to HIR boundary (`#415`). Prefer the branch's dedicated `hir::yul` direction as reference, but land reviewable slices.
+2. MIR-only infrastructure, text format/parser, validator, and pass manager.
+3. HIR-to-MIR lowering for arithmetic, locals, branches, loops, returns, and minimal builtins.
+4. Liveness (`#694`) and phi elimination (`#695`).
+5. Stack model <=16 (`#696`), then full stack scheduling/spilling (`#697`).
+6. Assembler label/jump resolution (`#698`).
+7. First executable bytecode.
+8. Bytecode equivalence harness (`#704`) with Foundry/Anvil/revm.
+9. Complex types, storage, calldata, ABI, events, constructors, calls (`#699` and branch commits).
+10. Optimizer passes only after runtime oracles exist: DCE (`#700`), constant folding (`#701`), SCCP (`#702`), CSE (`#703`).
 
-The `tools/tester/src/solc/solidity.rs` skip-list is the public progress metric: every removed entry is a landed PR.
+Do not claim codegen progress unless the PR states exactly which runtime/equivalence tier is available and which is still missing.
 
-Erwin (`fuzz/run_erwin.sh`) already supports `--target solar`. Extend to run continuously; every divergence is a regression-test PR. Erwin's initial research found 26 bugs across solc/solang/solar.
+### Phase 3: Production Solidity Correctness
 
-### Diagnostics (supporting)
+Goal: compile real Solidity projects, not just fixtures.
 
-Port one solc error code per PR from `libsolidity/analysis/*.cpp` into Solar's `error_code!(NNNN)` with a matching UI fixture. AGENTS.md style rules apply: no trailing periods, backtick code references, `note`/`help`/`span_note` subdiagnostics. Use `sym::name` or `kw::Keyword` instead of `.as_str()`. Visitor pattern always calls `walk_*` continuation.
+Corpus phases:
 
-### MIR + codegen (draft — scaffolding phase)
+- Phase 3A: `forge-std`, small Foundry fixture projects, direct single-file remapping smoke.
+- Phase 3B: OpenZeppelin, Solmate, PRBMath.
+- Phase 3C: Solady, Uniswap v3, Uniswap v4.
+- Phase 3D: Aave v3, Maker DSS, Compound v2/v3.
+- Phase 3E: EigenLayer and other large modern Foundry projects once sharding/caching are stable.
 
-Issue [#687](https://github.com/paradigmxyz/solar/issues/687) is a fully specified 11-sub-issue roadmap authored by gakonst. This fork does not yet contain `crates/codegen` or `crates/mir`. The dependency order is:
+Use framework builds to test project layout, remappings, build-info, profiles, and import resolution. Use direct Standard JSON inputs to compare solc and Solar outputs. Do not use production corpora as a first PR gate for small parser fixes, but always move serious correctness claims toward these corpora.
 
-1. Bytecode-equivalence harness (#704) — unlocks the runtime oracle
-2. Liveness (#694) → PhiElim (#695) → DCE (#700) → ConstFold (#701) → SCCP (#702) → CSE (#703)
-3. Stack Model ≤16 (#696, CRITICAL) and Full Stack Scheduling (#697, blocked on #696) — escalate for human design review
+### Phase 4: Performance
 
-Each issue body has pseudocode and "patterns from Venom/Sonatina" — good agent input. One pass = one PR, ~400–1200 LoC. Oracle ladder: cargo build → nextest → runtime bytecode diff → revm execution on OZ/Uniswap/Solady corpora. **Do not claim codegen progress without the runtime oracle.**
+Goal: preserve and improve Solar's speed after correctness has a floor.
 
-### Bytecode equivalence harness (draft — gating unlock for codegen)
+Method:
 
-Issue [#704](https://github.com/paradigmxyz/solar/issues/704). gakonst phrasing: "Foundry property tests + Anvil, compile with solc → bytecode A, compile with Solar → bytecode B, deploy both, assert same return values, state changes, reverts, gas (within tolerance)." Adapter crate in `tools/diff-harness/` using alloy + revm + foundry-compilers.
+- Profile before optimizing.
+- Use Reth-style and Foundry-style practice: CodSpeed, Criterion, iai-callgrind, flamegraph/Samply, DHAT, Cachegrind/Callgrind, and macro real-project corpora.
+- Optimize one hot path per PR.
+- Include correctness oracle plus performance oracle in every performance PR.
 
-### Performance (supporting)
+Likely hot paths:
 
-Protect Solar's front-end performance identity. Hot-path patterns must remain explicit: `sym::`, `kw::`, arenas, visitor discipline. Run `cargo bench -p solar-bench --bench criterion -- --quick` when hot paths change. CodSpeed + iai-callgrind run on every PR; auto-draft when delta exceeds -5%.
+- Lexer cursor and tokenization.
+- Parser token advancement and expression parsing.
+- Unicode/string/unescape handling.
+- Source map and source file creation.
+- Symbol interning.
+- AST arena allocation and thin slices.
+- HIR lowering.
+- Name resolution and type checking.
+- Import graph and file IO.
 
-### LSP (draft — blocked on typeck)
+## Correctness Oracle Ladder
 
-Issue [#394](https://github.com/paradigmxyz/solar/issues/394) sub-issues: #416 flychecks, #417 lifecycle, #418 symbols, #419 autocomplete, #420 go-to-def, #421 inlay hints. This fork doesn't have `crates/lsp` yet. Not dispatched until typeck is stable enough.
+Passing a lower tier only proves that tier. Do not overclaim.
 
-### Fuzzing + hardening (supporting)
+| Tier | Oracle | What It Proves |
+| --- | --- | --- |
+| 0 | `cargo +nightly fmt --all --check`, `typos --format brief` | style hygiene |
+| 1 | `cargo check --workspace`, `cargo clippy --workspace --all-targets -- -D warnings` | Rust compile/lint health |
+| 2 | `cargo nextest run --workspace`, `cargo test --doc --workspace` | unit/integration behavior |
+| 3 | `cargo uitest` / `TESTER_MODE=ui cargo nextest run -p solar-compiler --test tests` | owned diagnostics/UI behavior |
+| 4 | `TESTER_MODE=solc-solidity cargo nextest run -p solar-compiler --test tests` | parser/corpus accept-reject behavior, not full typeck |
+| 4Y | `TESTER_MODE=solc-yul cargo nextest run -p solar-compiler --test tests` | Yul parser corpus behavior |
+| 5 | Standard JSON AST/ABI/NatSpec diff vs solc | frontend emission parity |
+| 6 | Production Foundry/Hardhat build-info corpus compile | real project ingestion and frontend/type behavior |
+| 7 | bytecode diff solc vs Solar | codegen output equivalence |
+| 8 | Foundry/Anvil/revm runtime differential | deployed behavior equivalence |
+| 9 | fuzz and metamorphic transforms | unknown-unknown discovery |
+| 10 | SMT/translation validation for rewrites | proof-level optimizer correctness |
 
-Expand malformed-input resilience and crash resistance. `fuzz/run_erwin.sh` is the main tool. Every divergence or crash is a regression fixture PR.
+## Upstream Policy
 
-### Novel SOTA research (always-on, never blocked)
+Always check upstream before selecting work.
 
-This track brings 2024–2026 compiler research into Solar as prototypes under `research/`. Ships on research branches; never blocks primary PRs. Doubles as the keep-alive filler when priority queues drain. Five streams:
+Track immediately:
 
-**Aegraph-based Yul optimizer** — acyclic e-graph + sea-of-nodes-with-CFG + ISLE-like DSL + eager rewrites + cost-based extraction (Fallin 2026 Cranelift retrospective: aegraphs beat full equality saturation for rulesets in the hundreds). Crate at `research/solar-aegraph-yul/`.
+- `paradigmxyz/solar#693` / `feat/codegen-mir`: codegen architecture reference.
+- `#737`: `-Ztypeck` solc corpus exposure reference.
+- `#754`: sema cache performance work.
+- `#755`: small sema shadowing fix for `this`/`super`.
+- `#743`, `#744`: small parser/diagnostic fixes.
+- `onbjerg/lsp-scaffolding` / `#401`: LSP reference, blocked behind typeck maturity.
 
-**Alive2-for-EVM translation validation** — SMT-based bounded verification of every Yul rewrite rule (Lopes et al. PLDI 2021, Crocus/VanHattum ASPLOS 2024). Per-rule SMT discharge removes the test-coverage gap. Embarrassingly parallel — ideal for the orchestrator. Crate at `research/solar-yul-tv/`.
+Branch strategy:
 
-**EVM superoptimization** — EBSO/SuperStack unbounded SMT superoptimizer + Hydra-style generalization of missed peepholes into bitwidth-agnostic, SMT-verified rewrite rules (Nagele, Albert PLDI 2024, Regehr OOPSLA 2024). Each generalized rule is a tight, single-PR-sized unit. `research/solar-superopt/`.
+- Import active reference branches into the fork only as tracking branches unless a task says otherwise.
+- Cherry-pick small fixes only when the diff is narrow, current, and comes with or can receive tests.
+- Do not merge `feat/codegen-mir` wholesale into `main`; extract a dependency-ordered integration branch and land reviewable slices.
+- Ignore stale WIP branches unless a task cites an exact commit and a verification plan.
 
-**Continuous metamorphic fuzz** — CSmith/EMI lineage (Yang/Regehr PLDI 2011, Le/Su PLDI 2014) applied to Solidity via Erwin + Solsmith + tree-crasher. 17 metamorphic relations: rename-invariance, whitespace-invariance, hex/decimal literal equivalence, import-order invariance, optimizer idempotence, etc. Each is one PR. Infinite supply.
+## Work Selection Rules
 
-**LLM rewrite-rule synthesis** — Hydra-shaped (OOPSLA 2024): sample a missed peephole from the superopt or fuzz output, propose a bitwidth-agnostic rewrite rule via LLM, discharge via SMT (translation validation infra), if green add to the ISLE-DSL. This loop has infinite valid work and is the ultimate keep-alive filler.
+The planner should choose current repo-grounded slices, not pre-scripted tiny edits.
 
-## What counts as done
+Good slices:
 
-A task is done when:
-- The change exists in this fork's default branch
-- It has focused tests that prove the specific behavior changed
-- The oracle evidence is in the PR body — not "CI passed" but "solc_syntax_tests: 2840/3551 → 2847/3551" or "cargo uitest: new error code 3726 fixture passing"
-- A reviewer could merge it without asking follow-up questions
+- A solc corpus category gets exposed under the correct Solar mode with counts.
+- A specific TypeError parity gap gets an owned UI fixture and implementation.
+- A parser/diagnostic mismatch gets a fixture, error code, and `cargo uitest`.
+- A Yul statement kind gets lowered with a fixture and a clear blocked/unblocked dependency.
+- A MIR/codegen infrastructure slice lands without claiming runtime parity.
+- A production corpus harness adds one new measurable project or command.
+- A performance PR changes one hot path and reports before/after benchmark evidence.
 
-A task is NOT done when "it compiles" (tier 1), "tests pass" (unnamed tests), or codegen progress is claimed without a runtime differential.
+Bad slices:
 
-## House style
+- Docs-only work unless it unlocks run correctness.
+- Comment-only or TODO-removal-only patches.
+- Snapshot reblessing without source change and explanation.
+- Codegen claims without bytecode/runtime oracle.
+- Performance claims without profiling and correctness evidence.
+- Broad "implement typeck" or "merge codegen" tasks without dependency slicing.
 
-Solar ships an in-tree `AGENTS.md` and `CLAUDE.md` authored by @onbjerg. Follow them exactly:
-- Conventional Commits: `feat(sema): …`, `fix(parse): …`
-- Diagnostic style: no trailing periods, backtick code refs, `note`/`help`/`span_note` subdiagnostics
-- Use `sym::name` or `kw::Keyword` instead of `.as_str()`
-- Visitor pattern: always call `walk_*` for child traversal
-- Arena allocation for AST: no `Box<T>` outside arenas
-- UI tests: `//~ ERROR:`/`WARN:`/`NOTE:`/`HELP:` annotations
+## Production Corpus Plan
 
-## Rejected design decisions
+Start small and make the harness stable before adding noisy protocols.
 
-These are recorded in the pads platform's memory. Do not re-derive them:
-- **No salsa retrofit** — the current `cached!` memoizer is adequate; salsa is a multi-week cross-cutting change with unclear win (matklad 2026, @DaniPopes on #91).
-- **No direct Venom adoption** — Solar's MIR should be shaped by Solidity's HIR, not Vyper's tree. Borrow patterns from Cranelift/Sonatina, not Venom.
-- **No full equality saturation** in the Yul optimizer — Fallin 2026 is explicit: aegraphs + eager rewrites beat egglog at Solar's ruleset size.
-- **No self-hosting before codegen** — Solar can't compile itself until codegen emits correct EVM bytecode. 2027+ aspiration.
-- **No rebless of testdata/solidity/ snapshots** — that submodule is the oracle. Disagreements are divergences to document or bugs to fix.
+Phase A:
 
-## The wiki — your knowledge base
+- `foundry-rs/forge-std`
+- small Foundry fixtures
+- direct one-file remapping smoke tests
 
-Deep domain context, research findings, synthesis documents, and accumulated lessons live in the **pads wiki** (the project's structured knowledge store, surfaced in the pads UI and queryable via the orchestrator API). The wiki is hierarchical and searchable — treat it as your long-term memory.
+Phase B:
 
-**Before starting any non-trivial task**, query the wiki for prior findings on the same topic. The wiki already contains research on: AI PR acceptance patterns and what makes maintainers merge, context engineering for long-running agents, Solar-specific contribution patterns, oracle design for compiler correctness, sandbox pipeline architecture, subagent coordination strategies, and more. These were produced by dedicated research passes and are higher-quality than what you'd get by re-deriving them from scratch. Use them.
+- `OpenZeppelin/openzeppelin-contracts`
+- `transmissions11/solmate`
+- `PaulRBerg/prb-math`
 
-**After completing a task**, contribute what you learned back. Every non-obvious insight — a pattern that worked, a dead end, a solc behavior that surprised you, a testing trick — should become a wiki entry tagged with `pattern_type` and `domain` so future agents can retrieve it. When ≥3 entries share the same `(pattern_type, domain)` pair, the platform auto-proposes promoting the pattern to a rule.
+Phase C:
 
-The orchestrator's **frontier** (the ranked queue of open tasks) is also wiki-backed. When you complete a task, the follow-up questions and next steps you identify become new frontier entries. When the frontier is empty, the keep-alive stream draws from research-sota — but a well-stocked frontier from your own follow-ups is always better than synthetic filler.
+- `Vectorized/solady`
+- `Uniswap/v3-core`
+- `Uniswap/v4-core`
 
-## Code quality bar
+Phase D:
 
-Every PR should be something a Paradigm reviewer would merge without hesitation. The bar is high because trust is earned per-PR, not per-session.
+- `aave/aave-v3-core`
+- `sky-ecosystem/dss`
+- `compound-finance/compound-protocol`
+- `compound-finance/comet`
 
-**Correctness.** The change does what it claims. The oracle tier is appropriate for the scope (a parser fix needs tier 3; a MIR pass needs tier 7+). Test fixtures exercise the exact behavior changed, not just "something nearby passes."
+Phase E:
 
-**Scope.** One logical change per PR. The blast radius fits the archetype: ≤5 files for a parser-slice, ≤3 for a diagnostic-port, ≤10 for a lowering-slice, ≤20 for a codegen-slice. If a change touches more than 2 crates, pause for human approval.
+- `Layr-Labs/eigenlayer-contracts`
 
-**Style.** AGENTS.md and CLAUDE.md are law:
-- Conventional Commits: `feat(sema): …`, `fix(parse): …`
-- Diagnostic style: no trailing periods, backtick code refs, `note`/`help`/`span_note` subdiagnostics
-- Use `sym::name` or `kw::Keyword` instead of `.as_str()` on `Symbol`/`Ident`
-- Visitor pattern: always call `walk_*` for child traversal; `type BreakValue = Never` if visitor never breaks
-- Arena allocation for AST: no `Box<T>` outside arenas
-- UI test annotations: `//~ ERROR:`/`WARN:`/`NOTE:`/`HELP:`
-- No filler words: "comprehensive", "robust", "enhance", "streamline", "seamless" are banned
+Each corpus PR must state which compiler versions, remappings, profiles, optimizer settings, `viaIR`, EVM version, metadata hash settings, and output selections it uses.
 
-**Evidence.** The PR body carries the oracle evidence:
-- Before/after test counts: "solc_syntax_tests: 2840/3551 → 2847/3551"
-- Solc error code citation: "Ports TypeError 3726, ref `libsolidity/analysis/TypeChecker.cpp` L482 at sha `abc1234`"
-- CodSpeed delta for perf-sensitive paths
-- "CI passed" is not evidence. Named oracle results are.
+## PR Quality Bar
 
-**Reviewability.** A reviewer should understand the change, verify the evidence, and click merge in under 10 minutes. If the PR body would require follow-up questions, it's not ready. If the diff requires scrolling past 20 files, it's too big.
+Every PR must include:
 
-## Open questions
+- Scope and changed files.
+- Linked upstream issue/PR/branch when relevant.
+- What behavior changed.
+- Why this slice is in the current phase.
+- Exact oracle commands and outputs.
+- For corpus work: before/after counts.
+- For solc parity: error code or Standard JSON field cited when relevant.
+- For performance: baseline commit, benchmark commands, before/after numbers, and profiler summary.
+- Known risks and follow-up tasks.
 
-**Yul switch semantics** (paradigmxyz/solar#415): How should Yul `switch` fall-through map to HIR? Options: (a) preserve structure with explicit Default, (b) desugar to nested if. dipanshuhappy's draft #652 raises this. Humans weigh in before the yul-hir track ships beyond let/assign.
+A task is not done because it compiles. It is done when the specific behavior is tested, the evidence is in the PR body, and the next frontier is clearer than before.
+
+## House Style
+
+Follow `AGENTS.md` and upstream style:
+
+- Conventional commit titles.
+- No trailing full stops in diagnostic messages.
+- Backticks for code identifiers.
+- Use `sym::name` or `kw::Keyword` rather than `.as_str()` where applicable.
+- Visitors call `walk_*` unless intentionally stopping.
+- Arena allocation discipline.
+- UI annotations use `//~ ERROR:`, `//~ WARN:`, `//~ NOTE:`, `//~ HELP:`.
+
+## Memory And Frontier Discipline
+
+Before non-trivial work, search the Pads wiki and upstream issues/PRs. After work, record:
+
+- what was learned,
+- what failed,
+- which corpus or oracle was decisive,
+- exact follow-up slices,
+- and whether the work belongs to Phase 1, 2, 3, or 4.
+
+When blocked, do not keep reading. Produce a blocker artifact that names the missing dependency and creates the next actionable task.
