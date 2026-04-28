@@ -119,6 +119,138 @@
       "command": "cargo codspeed build && cargo codspeed run"
     }
   ],
+  "corpora": [
+    {
+      "id": "forge-std",
+      "source": "foundry-rs/forge-std",
+      "commit": "pin-after-first-fetch",
+      "phase": "3A",
+      "setup": [
+        "forge build --build-info"
+      ],
+      "proves": [
+        "Foundry project layout",
+        "remappings",
+        "basic production imports"
+      ]
+    },
+    {
+      "id": "openzeppelin-contracts",
+      "source": "OpenZeppelin/openzeppelin-contracts",
+      "commit": "pin-after-first-fetch",
+      "phase": "3B",
+      "setup": [
+        "npm ci",
+        "npm run compile"
+      ],
+      "proves": [
+        "inheritance",
+        "interfaces",
+        "proxies",
+        "custom errors",
+        "storage layout"
+      ]
+    },
+    {
+      "id": "solady",
+      "source": "Vectorized/solady",
+      "commit": "pin-after-first-fetch",
+      "phase": "3C",
+      "setup": [
+        "forge build --build-info"
+      ],
+      "proves": [
+        "inline assembly",
+        "modern opcodes",
+        "gas-sensitive library code"
+      ]
+    },
+    {
+      "id": "prb-math",
+      "source": "PaulRBerg/prb-math",
+      "commit": "pin-after-first-fetch",
+      "phase": "3B",
+      "setup": [
+        "forge build --build-info"
+      ],
+      "proves": [
+        "UDVTs",
+        "fixed-point arithmetic",
+        "custom errors"
+      ]
+    },
+    {
+      "id": "uniswap-v4-core",
+      "source": "Uniswap/v4-core",
+      "commit": "pin-after-first-fetch",
+      "phase": "3C",
+      "setup": [
+        "forge build --build-info"
+      ],
+      "proves": [
+        "modern Foundry profiles",
+        "hooks",
+        "transient-storage-era code",
+        "viaIR pressure"
+      ]
+    }
+  ],
+  "branch_policy": {
+    "default_upstream_mode": "reference_only",
+    "write_target": "fork_only",
+    "require_import_decision": true,
+    "watchlist": [
+      {
+        "id": "codegen-mir",
+        "source": "paradigmxyz/solar",
+        "upstream_ref": "feat/codegen-mir",
+        "mode": "extract",
+        "priority": "critical",
+        "related": [
+          "paradigmxyz/solar#693",
+          "paradigmxyz/solar#687",
+          "paradigmxyz/solar#704"
+        ],
+        "notes": "Reference branch for MIR/codegen architecture; never blind merge."
+      },
+      {
+        "id": "typeck-solc-corpus",
+        "source": "paradigmxyz/solar",
+        "upstream_ref": "pull/737/head",
+        "mode": "port",
+        "priority": "high",
+        "related": [
+          "paradigmxyz/solar#615",
+          "paradigmxyz/solar#663",
+          "paradigmxyz/solar#737"
+        ],
+        "notes": "Reference for exposing TypeError solc corpus under -Ztypeck."
+      },
+      {
+        "id": "sema-caches",
+        "source": "paradigmxyz/solar",
+        "upstream_ref": "pull/754/head",
+        "mode": "track",
+        "priority": "medium",
+        "related": [
+          "paradigmxyz/solar#754"
+        ],
+        "notes": "Perf-oriented sema cache work; track until correctness gates are stable."
+      },
+      {
+        "id": "this-shadowing-fix",
+        "source": "paradigmxyz/solar",
+        "upstream_ref": "pull/755/head",
+        "mode": "cherry_pick",
+        "priority": "high",
+        "related": [
+          "paradigmxyz/solar#216",
+          "paradigmxyz/solar#755"
+        ],
+        "notes": "Small current sema bugfix candidate; preserve tests/authorship if imported."
+      }
+    ]
+  },
   "tracks": [
     {
       "id": "typeck",
