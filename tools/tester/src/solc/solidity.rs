@@ -6,51 +6,103 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
+use std::sync::{Mutex, OnceLock};
+use std::collections::HashMap;
+
+/// Global accumulator for skip reasons and counts.
+static SKIP_REPORT: OnceLock<Mutex<HashMap<&'static str, usize>>> = OnceLock::new();
+
+fn skip_report() -> &'static Mutex<HashMap<&'static str, usize>> {
+    SKIP_REPORT.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Increment the counter for a skip reason.
+fn record_skip(reason: &'static str) {
+    let mut map = skip_report().lock().unwrap();
+    *map.entry(reason).or_insert(0) += 1;
+}
+
+/// Print a reviewer-readable summary of skipped vs attempted tests.
+pub fn print_skip_summary() {
+    let map = skip_report().lock().unwrap();
+    if map.is_empty() {
+        eprintln!("solc-solidity skip summary: no skips recorded");
+        return;
+    }
+    let total_skips: usize = map.values().sum();
+    eprintln!("solc-solidity skip summary: {} skipped total", total_skips);
+    let mut reasons: Vec<_> = map.iter().collect();
+    reasons.sort_by_key(|(reason, _)| *reason);
+    for (reason, count) in reasons {
+        eprintln!("  {:>4} x {}", count, reason);
+    }
+}
+
 pub(crate) fn should_skip(path: &Path) -> Result<(), &'static str> {
     let path_contains = path_contains_curry(path);
 
     if path_contains("/libyul/") {
-        return Err("actually a Yul test");
+        let reason = "actually a Yul test";
+        record_skip(reason);
+        return Err(reason);
     }
 
     if path_contains("/cmdlineTests/") {
-        return Err("CLI tests do not have the same format as everything else");
+        let reason = "CLI tests do not have the same format as everything else";
+        record_skip(reason);
+        return Err(reason);
     }
 
     if path_contains("/lsp/") {
-        return Err("LSP tests do not have the same format as everything else");
+        let reason = "LSP tests do not have the same format as everything else";
+        record_skip(reason);
+        return Err(reason);
     }
 
     if path_contains("/ASTJSON/") {
-        return Err("no JSON AST");
+        let reason = "no JSON AST";
+        record_skip(reason);
+        return Err(reason);
     }
 
     if path_contains("/functionDependencyGraphTests/") || path_contains("/experimental") {
-        return Err("solidity experimental is not implemented");
+        let reason = "solidity experimental is not implemented";
+        record_skip(reason);
+        return Err(reason);
     }
 
     // We don't parse licenses.
     if path_contains("/license/") {
-        return Err("licenses are not checked");
+        let reason = "licenses are not checked";
+        record_skip(reason);
+        return Err(reason);
     }
 
     if path_contains("natspec") {
-        return Err("natspec is not checked");
+        let reason = "natspec is not checked";
+        record_skip(reason);
+        return Err(reason);
     }
 
     if path_contains("_direction_override") {
-        return Err("Unicode direction override checks not implemented");
+        let reason = "Unicode direction override checks not implemented";
+        record_skip(reason);
+        return Err(reason);
     }
 
     if path_contains("wrong_compiler_") {
-        return Err("Solidity pragma version is not checked");
+        let reason = "Solidity pragma version is not checked";
+        record_skip(reason);
+        return Err(reason);
     }
 
     // Directories starting with `_` are not tests.
     if path_contains("/_")
         && !path.components().next_back().unwrap().as_os_str().to_str().unwrap().starts_with('_')
     {
-        return Err("supporting file");
+        let reason = "supporting file";
+        record_skip(reason);
+        return Err(reason);
     }
 
     let stem = path.file_stem().unwrap().to_str().unwrap();
@@ -106,7 +158,9 @@ pub(crate) fn should_skip(path: &Path) -> Result<(), &'static str> {
         | "mapping_nonelementary_key_1"
         | "mapping_nonelementary_key_4"
     ) {
-        return Err("manually skipped");
+        let reason = "manually skipped";
+        record_skip(reason);
+        return Err(reason);
     };
 
     Ok(())
