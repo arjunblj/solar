@@ -71,7 +71,7 @@ impl Error {
                         _ => ErrorKind::Error,
                     };
                     let start = caps.get(2).map(|cap| cap.as_str().parse().unwrap()).unwrap_or(0);
-                    let line_num = file[..start].lines().count();
+                    let line_num = if start > 0 { file[..start].lines().count() } else { 0 };
                     let msg = caps.get(4).unwrap().as_str().trim().to_owned();
                     errors.push(Self {
                         line_num,
