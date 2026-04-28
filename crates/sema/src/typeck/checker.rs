@@ -1444,7 +1444,6 @@ fn valid_shift<'gcx>(ty: Ty<'gcx>, other: Ty<'gcx>, op: hir::BinOpKind) -> Optio
 
 fn valid_meta_type(ty: Ty<'_>) -> bool {
     debug_assert!(!matches!(ty.kind, TyKind::Type(_)));
-    // TODO: Disallow super
     matches!(
         ty.kind,
         TyKind::Elementary(hir::ElementaryType::Int(_) | hir::ElementaryType::UInt(_))
