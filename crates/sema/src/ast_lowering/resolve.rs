@@ -1573,20 +1573,40 @@ impl Declarations {
         Ok(())
     }
 
-    fn conflicting_declaration(
-        hir: &hir::Hir<'_>,
-        decl: Declaration,
-        declarations: &[Declaration],
-    ) -> Option<Declaration> {
-        use Res::*;
-        use hir::ItemId::*;
+       hir: &hir::Hir<'_>,
+       decl: Declaration,
+       declarations: &[Declaration],
+   ) -> Option<Declaration> {
+       use Res::*;
+       use hir::ItemId::*;
 
-        if declarations.is_empty() {
-            return None;
-        }
+       if declarations.is_empty() {
+           return None;
+       }
 
-        // https://github.com/argotorg/solidity/blob/de1a017ccb935d149ed6bcbdb730d89883f8ce02/libsolidity/analysis/DeclarationContainer.cpp#L35
-        if matches!(decl.res, Item(Function(_) | Event(_))) {
+       // https://github.com/argotorg/solidity/blob/de1a017ccb935d149ed6bcbdb730d89883f8ce02/libsolidity/analysis/DeclarationContainer.cpp#L35
+       if matches!(decl.res, Item(Function(_) | Event(_))) {
+           let mut getter = None;
+           if let Item(Function(id)) = decl.res {
+               getter = Some(id);
+               let f = hir.function(id);
+               if !f.kind.is_ordinary() {
+                   return Some(declarations[0]);
+               }
+           }
+           let same_kind = |decl2: &Declaration| match decl2.res {
+               Item(Variable(v)) => hir.variable(v).getter == getter,
+               Item(Function(f)) => hir.function(f).kind.is_ordinary(),
+               ref k => k.matches(&decl.res),
+           };
+           declarations.iter().find(|&decl2| !same_kind(decl2)).copied()
+       } else if declarations == [decl] {
+           None
+       } else {
+           Some(declarations[0])
+       }
+   }
+        if matches!(decl.res, Item(Function(_) | Event(_) | Error(_))) {
             let mut getter = None;
             if let Item(Function(id)) = decl.res {
                 getter = Some(id);
@@ -1596,27 +1616,24 @@ impl Declarations {
                 }
             }
             let same_kind = |decl2: &Declaration| match decl2.res {
-                Item(Variable(v)) => hir.variable(v).getter == getter,
-                Item(Function(f)) => hir.function(f).kind.is_ordinary(),
+               Item(Variable(v)) => hir.variable(v).getter == getter,
+               Item(Function(f)) => hir.function(f).kind.is_ordinary(),
+                Builtin(_) => true,
+               ref k => k.matches(&decl.res),
+           };
+           declarations.iter().find(|&decl2| !same_kind(decl2)).copied()
+        } else if matches!(decl.res, Builtin(_)) {
+            let same_kind = |decl2: &Declaration| match decl2.res {
+                Item(Function(_) | Event(_) | Error(_)) => true,
                 ref k => k.matches(&decl.res),
             };
             declarations.iter().find(|&decl2| !same_kind(decl2)).copied()
         } else if declarations == [decl] {
-            None
-        } else {
-            Some(declarations[0])
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct Declaration {
-    pub(crate) res: Res,
-    pub(crate) span: Span,
-}
-
-impl std::ops::Deref for Declaration {
-    type Target = Res;
+           None
+       } else {
+           Some(declarations[0])
+       }
+   }
 
     #[inline]
     fn deref(&self) -> &Self::Target {
