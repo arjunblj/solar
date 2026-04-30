@@ -1,6 +1,26 @@
 use crate::utils::path_contains_curry;
 use std::path::Path;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum YulCorpusRoute {
+    Yul,
+    Solidity,
+}
+
+impl YulCorpusRoute {
+    fn for_path(path: &Path) -> Self {
+        let path_contains = path_contains_curry(path);
+        if path_contains(".sol") { Self::Solidity } else { Self::Yul }
+    }
+
+    fn ensure_yul(self) -> Result<(), &'static str> {
+        match self {
+            Self::Yul => Ok(()),
+            Self::Solidity => Err("not a Yul file"),
+        }
+    }
+}
+
 pub(crate) fn should_skip(path: &Path) -> Result<(), &'static str> {
     let path_contains = path_contains_curry(path);
 
@@ -27,9 +47,7 @@ pub(crate) fn should_skip(path: &Path) -> Result<(), &'static str> {
         return Err("not implemented in the parser");
     }
 
-    if path_contains(".sol") {
-        return Err("not a Yul file");
-    }
+    YulCorpusRoute::for_path(path).ensure_yul()?;
 
     let stem = path.file_stem().unwrap().to_str().unwrap();
     #[rustfmt::skip]
@@ -73,4 +91,20 @@ pub(crate) fn should_skip(path: &Path) -> Result<(), &'static str> {
     };
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn routes_solidity_sources_out_of_the_yul_corpus() {
+        let solidity_path = Path::new("/solidity/test/libyul/accidental_solidity.sol");
+        assert_eq!(YulCorpusRoute::for_path(solidity_path), YulCorpusRoute::Solidity);
+        assert_eq!(should_skip(solidity_path), Err("not a Yul file"));
+
+        let yul_path = Path::new("/solidity/test/libyul/plain_yul.yul");
+        assert_eq!(YulCorpusRoute::for_path(yul_path), YulCorpusRoute::Yul);
+        assert_eq!(should_skip(yul_path), Ok(()));
+    }
 }
