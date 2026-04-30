@@ -9,8 +9,9 @@ use std::{
 pub(crate) fn should_skip(path: &Path) -> Result<(), &'static str> {
     let path_contains = path_contains_curry(path);
 
-    if path_contains("/libyul/") {
-        return Err("actually a Yul test");
+    match SolcCorpusRoute::for_path(path) {
+        SolcCorpusRoute::Solidity => {}
+        SolcCorpusRoute::Yul => return Err("actually a Yul test"),
     }
 
     if path_contains("/cmdlineTests/") {
@@ -112,6 +113,18 @@ pub(crate) fn should_skip(path: &Path) -> Result<(), &'static str> {
     Ok(())
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SolcCorpusRoute {
+    Solidity,
+    Yul,
+}
+
+impl SolcCorpusRoute {
+    fn for_path(path: &Path) -> Self {
+        if path_contains_curry(path)("/libyul/") { Self::Yul } else { Self::Solidity }
+    }
+}
+
 /// Handles `====` delimiters in a solc test file, and creates temporary files as necessary.
 ///
 /// Returns `true` if it contains delimiters and the caller should not compile the original file.
@@ -208,4 +221,19 @@ fn source_delim(line: &str) -> Option<&str> {
 
 fn external_source_delim(line: &str) -> Option<&str> {
     line.strip_prefix("==== ExternalSource:").and_then(|s| s.strip_suffix("====")).map(str::trim)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn routes_libyul_paths_out_of_solidity_corpus() {
+        let yul_path = Path::new("testdata/solidity/test/libyul/smoke.yul");
+        let solidity_path = Path::new("testdata/solidity/test/libsolidity/syntax/smoke.sol");
+
+        assert_eq!(SolcCorpusRoute::for_path(yul_path), SolcCorpusRoute::Yul);
+        assert_eq!(SolcCorpusRoute::for_path(solidity_path), SolcCorpusRoute::Solidity);
+        assert_eq!(should_skip(yul_path), Err("actually a Yul test"));
+    }
 }
