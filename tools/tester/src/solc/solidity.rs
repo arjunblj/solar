@@ -6,6 +6,17 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
+/// Enables a narrow, stable solc-solidity shard for fast corpus canaries.
+///
+/// Use together with `TESTER_MODE=solc-solidity`. The current runner still parses these tests only,
+/// but keeping the canary list here gives the next `-Ztypeck` slice a single surface to reuse when it
+/// starts tightening semantic expectations.
+const CANARY_ENV_VAR: &str = "TESTER_SOLC_SOLIDITY_CANARY";
+
+const CANARY_TESTS: &[&str] = &[
+    "test/libsolidity/syntaxTests/functionCalls/named_arguments_overload_failing1.sol",
+];
+
 pub(crate) fn should_skip(path: &Path) -> Result<(), &'static str> {
     let path_contains = path_contains_curry(path);
 
@@ -109,7 +120,20 @@ pub(crate) fn should_skip(path: &Path) -> Result<(), &'static str> {
         return Err("manually skipped");
     };
 
+    if canary_enabled() && !is_canary_test(path) {
+        return Err("outside solc-solidity canary");
+    }
+
     Ok(())
+}
+
+fn canary_enabled() -> bool {
+    std::env::var_os(CANARY_ENV_VAR).is_some()
+}
+
+fn is_canary_test(path: &Path) -> bool {
+    let path = path.to_string_lossy().replace('\\', "/");
+    CANARY_TESTS.iter().any(|canary| path.ends_with(canary))
 }
 
 /// Handles `====` delimiters in a solc test file, and creates temporary files as necessary.
@@ -208,4 +232,26 @@ fn source_delim(line: &str) -> Option<&str> {
 
 fn external_source_delim(line: &str) -> Option<&str> {
     line.strip_prefix("==== ExternalSource:").and_then(|s| s.strip_suffix("====")).map(str::trim)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn canary_tests_are_exact_path_suffixes() {
+        assert!(is_canary_test(Path::new(
+            "/repo/testdata/solidity/test/libsolidity/syntaxTests/functionCalls/named_arguments_overload_failing1.sol",
+        )));
+        assert!(!is_canary_test(Path::new(
+            "/repo/testdata/solidity/test/libsolidity/syntaxTests/functionCalls/not_named_arguments_overload_failing1.sol",
+        )));
+    }
+
+    #[test]
+    fn canary_tests_are_not_otherwise_skipped() {
+        for canary in CANARY_TESTS {
+            assert_eq!(should_skip(Path::new(canary)), Ok(()));
+        }
+    }
 }
