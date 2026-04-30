@@ -7,50 +7,89 @@ use std::{
 };
 
 pub(crate) fn should_skip(path: &Path) -> Result<(), &'static str> {
+    match classify_case(path) {
+        CorpusCase::Execute => Ok(()),
+        CorpusCase::Skip(reason) | CorpusCase::Unsupported(reason) => Err(reason),
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CorpusCase {
+    Execute,
+    Skip(&'static str),
+    Unsupported(&'static str),
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct CorpusCounters {
+    pub(crate) executed: usize,
+    pub(crate) skipped: usize,
+    pub(crate) unsupported: usize,
+}
+
+impl CorpusCounters {
+    fn record(&mut self, case: CorpusCase) {
+        match case {
+            CorpusCase::Execute => self.executed += 1,
+            CorpusCase::Skip(_) => self.skipped += 1,
+            CorpusCase::Unsupported(_) => self.unsupported += 1,
+        }
+    }
+
+    pub(crate) fn from_paths<'a>(paths: impl IntoIterator<Item = &'a Path>) -> Self {
+        let mut counters = Self::default();
+        for path in paths {
+            counters.record(classify_case(path));
+        }
+        counters
+    }
+}
+
+pub(crate) fn classify_case(path: &Path) -> CorpusCase {
     let path_contains = path_contains_curry(path);
 
     if path_contains("/libyul/") {
-        return Err("actually a Yul test");
+        return CorpusCase::Skip("actually a Yul test");
     }
 
     if path_contains("/cmdlineTests/") {
-        return Err("CLI tests do not have the same format as everything else");
+        return CorpusCase::Unsupported("CLI tests do not have the same format as everything else");
     }
 
     if path_contains("/lsp/") {
-        return Err("LSP tests do not have the same format as everything else");
+        return CorpusCase::Unsupported("LSP tests do not have the same format as everything else");
     }
 
     if path_contains("/ASTJSON/") {
-        return Err("no JSON AST");
+        return CorpusCase::Unsupported("no JSON AST");
     }
 
     if path_contains("/functionDependencyGraphTests/") || path_contains("/experimental") {
-        return Err("solidity experimental is not implemented");
+        return CorpusCase::Unsupported("solidity experimental is not implemented");
     }
 
     // We don't parse licenses.
     if path_contains("/license/") {
-        return Err("licenses are not checked");
+        return CorpusCase::Skip("licenses are not checked");
     }
 
     if path_contains("natspec") {
-        return Err("natspec is not checked");
+        return CorpusCase::Skip("natspec is not checked");
     }
 
     if path_contains("_direction_override") {
-        return Err("Unicode direction override checks not implemented");
+        return CorpusCase::Unsupported("Unicode direction override checks not implemented");
     }
 
     if path_contains("wrong_compiler_") {
-        return Err("Solidity pragma version is not checked");
+        return CorpusCase::Skip("Solidity pragma version is not checked");
     }
 
     // Directories starting with `_` are not tests.
     if path_contains("/_")
         && !path.components().next_back().unwrap().as_os_str().to_str().unwrap().starts_with('_')
     {
-        return Err("supporting file");
+        return CorpusCase::Skip("supporting file");
     }
 
     let stem = path.file_stem().unwrap().to_str().unwrap();
@@ -106,10 +145,10 @@ pub(crate) fn should_skip(path: &Path) -> Result<(), &'static str> {
         | "mapping_nonelementary_key_1"
         | "mapping_nonelementary_key_4"
     ) {
-        return Err("manually skipped");
+        return CorpusCase::Skip("manually skipped");
     };
 
-    Ok(())
+    CorpusCase::Execute
 }
 
 /// Handles `====` delimiters in a solc test file, and creates temporary files as necessary.
@@ -208,4 +247,27 @@ fn source_delim(line: &str) -> Option<&str> {
 
 fn external_source_delim(line: &str) -> Option<&str> {
     line.strip_prefix("==== ExternalSource:").and_then(|s| s.strip_suffix("====")).map(str::trim)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CorpusCounters, classify_case};
+    use std::path::Path;
+
+    #[test]
+    fn corpus_counters_distinguish_executed_skipped_and_unsupported() {
+        let paths = [
+            Path::new("testdata/solidity/test/libsolidity/syntaxTests/valid.sol"),
+            Path::new("testdata/solidity/test/libsolidity/syntaxTests/license/mit.sol"),
+            Path::new("testdata/solidity/test/cmdlineTests/no_input/no_input.sol"),
+            Path::new("testdata/solidity/test/libsolidity/syntaxTests/rational_number_exp_limit_fine.sol"),
+        ];
+
+        let counters = CorpusCounters::from_paths(paths);
+
+        assert_eq!(counters.executed, 1);
+        assert_eq!(counters.skipped, 2);
+        assert_eq!(counters.unsupported, 1);
+        assert!(classify_case(paths[0]).is_executed());
+    }
 }
