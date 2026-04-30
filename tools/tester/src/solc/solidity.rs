@@ -6,6 +6,21 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SolcCorpusMode {
+    Solidity,
+    Yul,
+}
+
+impl SolcCorpusMode {
+    pub(crate) fn should_skip(self, path: &Path) -> Result<(), &'static str> {
+        match self {
+            Self::Solidity => should_skip(path),
+            Self::Yul => super::yul::should_skip(path),
+        }
+    }
+}
+
 pub(crate) fn should_skip(path: &Path) -> Result<(), &'static str> {
     let path_contains = path_contains_curry(path);
 
@@ -208,4 +223,18 @@ fn source_delim(line: &str) -> Option<&str> {
 
 fn external_source_delim(line: &str) -> Option<&str> {
     line.strip_prefix("==== ExternalSource:").and_then(|s| s.strip_suffix("====")).map(str::trim)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn solc_corpus_mode_routes_skip_rules() {
+        let yul_test = Path::new("/solidity/test/libyul/parser/simple.yul");
+        let solidity_test = Path::new("/solidity/test/libyul/not_yul.sol");
+
+        assert_eq!(SolcCorpusMode::Solidity.should_skip(yul_test), Err("actually a Yul test"));
+        assert_eq!(SolcCorpusMode::Yul.should_skip(solidity_test), Err("not a Yul file"));
+    }
 }

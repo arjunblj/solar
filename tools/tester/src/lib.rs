@@ -179,10 +179,9 @@ fn file_filter(path: &Path, config: &ui_test::Config, cfg: MyConfig<'_>) -> Opti
     if !ui_test::default_any_file_filter(path, config) {
         return Some(false);
     }
-    let skip = match cfg.mode {
-        Mode::Ui => false,
-        Mode::SolcSolidity => solc::solidity::should_skip(path).is_err(),
-        Mode::SolcYul => solc::yul::should_skip(path).is_err(),
+    let skip = match cfg.mode.solc_corpus_mode() {
+        Some(mode) => mode.should_skip(path).is_err(),
+        None => false,
     };
     Some(!skip)
 }
@@ -267,6 +266,14 @@ impl Mode {
 
     fn allows_yul(self) -> bool {
         !matches!(self, Self::SolcSolidity)
+    }
+
+    fn solc_corpus_mode(self) -> Option<solc::solidity::SolcCorpusMode> {
+        match self {
+            Self::Ui => None,
+            Self::SolcSolidity => Some(solc::solidity::SolcCorpusMode::Solidity),
+            Self::SolcYul => Some(solc::solidity::SolcCorpusMode::Yul),
+        }
     }
 }
 
