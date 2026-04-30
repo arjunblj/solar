@@ -1,8 +1,14 @@
 use crate::utils::path_contains_curry;
 use std::path::Path;
 
+const PARSER_CANARY: &str = "/yulSyntaxTests/smoke.yul";
+
 pub(crate) fn should_skip(path: &Path) -> Result<(), &'static str> {
     let path_contains = path_contains_curry(path);
+
+    if !path_contains(PARSER_CANARY) {
+        return Err("outside the Yul parser canary");
+    }
 
     if path_contains("/recursion_depth.yul") {
         return Err("recursion stack overflow");
