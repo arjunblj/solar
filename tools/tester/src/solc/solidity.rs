@@ -6,51 +6,69 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
+/// Only run source fixtures in the direct `solc-solidity` corpus canary.
+///
+/// Solc's repository also carries command-line tests, generated JSON/output tests, and helper
+/// sources. The direct canary is intentionally source-only so draft PR validation exercises Solar's
+/// parser against checked-in Solidity inputs without depending on, or producing, harness artifacts.
+enum SolcCorpusRoute {
+    Source,
+    Skip(&'static str),
+}
+
 pub(crate) fn should_skip(path: &Path) -> Result<(), &'static str> {
+    let SolcCorpusRoute::Source = route(path) else {
+        return Err(route(path).skip_reason().unwrap());
+    };
+
+    Ok(())
+}
+
+fn route(path: &Path) -> SolcCorpusRoute {
     let path_contains = path_contains_curry(path);
 
     if path_contains("/libyul/") {
-        return Err("actually a Yul test");
+        return SolcCorpusRoute::Skip("actually a Yul test");
     }
 
     if path_contains("/cmdlineTests/") {
-        return Err("CLI tests do not have the same format as everything else");
+        return SolcCorpusRoute::Skip("CLI tests do not have the same format as everything else");
     }
 
     if path_contains("/lsp/") {
-        return Err("LSP tests do not have the same format as everything else");
+        return SolcCorpusRoute::Skip("LSP tests do not have the same format as everything else");
     }
 
     if path_contains("/ASTJSON/") {
-        return Err("no JSON AST");
+        return SolcCorpusRoute::Skip("no JSON AST");
     }
 
     if path_contains("/functionDependencyGraphTests/") || path_contains("/experimental") {
-        return Err("solidity experimental is not implemented");
+        return SolcCorpusRoute::Skip("solidity experimental is not implemented");
     }
 
     // We don't parse licenses.
     if path_contains("/license/") {
-        return Err("licenses are not checked");
+        return SolcCorpusRoute::Skip("licenses are not checked");
     }
 
     if path_contains("natspec") {
-        return Err("natspec is not checked");
+        return SolcCorpusRoute::Skip("natspec is not checked");
     }
 
     if path_contains("_direction_override") {
-        return Err("Unicode direction override checks not implemented");
+        return SolcCorpusRoute::Skip("Unicode direction override checks not implemented");
     }
 
     if path_contains("wrong_compiler_") {
-        return Err("Solidity pragma version is not checked");
+        return SolcCorpusRoute::Skip("Solidity pragma version is not checked");
     }
 
     // Directories starting with `_` are not tests.
     if path_contains("/_")
         && !path.components().next_back().unwrap().as_os_str().to_str().unwrap().starts_with('_')
     {
-        return Err("supporting file");
+        return SolcCorpusRoute::Skip("supporting file");
     }
 
     let stem = path.file_stem().unwrap().to_str().unwrap();
@@ -106,10 +124,19 @@ pub(crate) fn should_skip(path: &Path) -> Result<(), &'static str> {
         | "mapping_nonelementary_key_1"
         | "mapping_nonelementary_key_4"
     ) {
-        return Err("manually skipped");
+        return SolcCorpusRoute::Skip("manually skipped");
     };
 
-    Ok(())
+    SolcCorpusRoute::Source
+}
+
+impl SolcCorpusRoute {
+    fn skip_reason(self) -> Option<&'static str> {
+        match self {
+            Self::Source => None,
+            Self::Skip(reason) => Some(reason),
+        }
+    }
 }
 
 /// Handles `====` delimiters in a solc test file, and creates temporary files as necessary.
