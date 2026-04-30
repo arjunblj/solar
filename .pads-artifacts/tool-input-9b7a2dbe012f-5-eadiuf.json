@@ -1,0 +1,10 @@
+[
+  {
+    "id": "call_i57TEAMgVtp6JAkirXXguQz4",
+    "type": "function",
+    "function": {
+      "name": "search_code",
+      "arguments": "{\"query\":\"should_skip(path)\",\"mode\":\"literal\",\"glob\":\"**/*.rs\",\"max_results\":20}"
+    }
+  }
+]

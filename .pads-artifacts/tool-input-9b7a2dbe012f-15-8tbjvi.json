@@ -1,0 +1,10 @@
+[
+  {
+    "id": "call_FGGQbYSu8NwCcSekQ0IRw2au",
+    "type": "function",
+    "function": {
+      "name": "sandbox_exec",
+      "arguments": "{\"command\":\"cargo check -p solar-tester\",\"intent\":\"build\",\"timeout_ms\":120000}"
+    }
+  }
+]

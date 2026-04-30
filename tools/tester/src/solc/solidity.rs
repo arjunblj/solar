@@ -6,12 +6,33 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
-pub(crate) fn should_skip(path: &Path) -> Result<(), &'static str> {
-    let path_contains = path_contains_curry(path);
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CorpusRoute {
+    Solidity,
+    Yul,
+}
 
-    if path_contains("/libyul/") {
-        return Err("actually a Yul test");
+impl CorpusRoute {
+    fn for_path(path: &Path) -> Self {
+        let path_contains = path_contains_curry(path);
+
+        if path_contains("/libyul/") { Self::Yul } else { Self::Solidity }
     }
+
+    fn solidity_skip_reason(self) -> Option<&'static str> {
+        match self {
+            Self::Solidity => None,
+            Self::Yul => Some("actually a Yul test"),
+        }
+    }
+}
+
+pub(crate) fn should_skip(path: &Path) -> Result<(), &'static str> {
+    if let Some(reason) = CorpusRoute::for_path(path).solidity_skip_reason() {
+        return Err(reason);
+    }
+
+    let path_contains = path_contains_curry(path);
 
     if path_contains("/cmdlineTests/") {
         return Err("CLI tests do not have the same format as everything else");
@@ -208,4 +229,20 @@ fn source_delim(line: &str) -> Option<&str> {
 
 fn external_source_delim(line: &str) -> Option<&str> {
     line.strip_prefix("==== ExternalSource:").and_then(|s| s.strip_suffix("====")).map(str::trim)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn routes_libyul_paths_out_of_solidity_corpus() {
+        let yul_path = Path::new("/repo/testdata/solidity/test/libyul/syntax/empty.yul");
+        assert_eq!(CorpusRoute::for_path(yul_path), CorpusRoute::Yul);
+        assert_eq!(should_skip(yul_path), Err("actually a Yul test"));
+
+        let solidity_path = Path::new("/repo/testdata/solidity/test/libsolidity/syntax/empty.sol");
+        assert_eq!(CorpusRoute::for_path(solidity_path), CorpusRoute::Solidity);
+        assert_eq!(should_skip(solidity_path), Ok(()));
+    }
 }

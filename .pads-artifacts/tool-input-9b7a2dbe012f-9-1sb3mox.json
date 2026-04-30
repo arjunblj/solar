@@ -1,0 +1,10 @@
+[
+  {
+    "id": "call_mD0x5CLdR07bv249hASsMDgv",
+    "type": "function",
+    "function": {
+      "name": "read_file",
+      "arguments": "{\"path\":\"tools/tester/src/utils.rs\",\"start_line\":1,\"end_line\":80}"
+    }
+  }
+]

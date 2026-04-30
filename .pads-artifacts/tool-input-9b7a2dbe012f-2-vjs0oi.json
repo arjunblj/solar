@@ -1,0 +1,10 @@
+[
+  {
+    "id": "call_7TI3OcGYTlW96FE3ECGdY8Gb",
+    "type": "function",
+    "function": {
+      "name": "workspace_read",
+      "arguments": "{\"fragments\":[{\"path\":\".pads-artifacts/task-context-9b7a2dbe012f.md\",\"start_line\":1,\"end_line\":220,\"max_bytes\":20000},{\"path\":\".pads-artifacts/task-rules-9b7a2dbe012f.md\",\"start_line\":1,\"end_line\":220,\"max_bytes\":12000},{\"path\":\".pads-artifacts/worker-progress-9b7a2dbe012f.txt\",\"start_line\":1,\"end_line\":120,\"max_bytes\":8000},{\"path\":\"tools/tester/src/solc/solidity.rs\",\"start_line\":1,\"end_line\":260,\"max_bytes\":30000},{\"path\":\"tools/tester/src/lib.rs\",\"start_line\":1,\"end_line\":220,\"max_bytes\":20000}]}"
+    }
+  }
+]

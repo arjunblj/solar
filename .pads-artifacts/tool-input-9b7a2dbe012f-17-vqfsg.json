@@ -1,0 +1,10 @@
+[
+  {
+    "id": "call_M9PrC0dVkES2y1cZB8gQx3A7",
+    "type": "function",
+    "function": {
+      "name": "update_task_progress",
+      "arguments": "{\"feature_id\":\"solc-corpus-mode-routing\",\"status\":\"passes\",\"summary\":\"Added explicit typed corpus routing in tools/tester/src/solc/solidity.rs and an in-file regression test covering libyul exclusion from the Solidity corpus while preserving normal Solidity paths.\",\"evidence\":[\"cargo fmt --all --check passed after formatting\",\"cargo check -p solar-tester passed\",\"cargo test -p solar-tester solc::solidity::tests::routes_libyul_paths_out_of_solidity_corpus passed\"],\"next_action\":\"Submit patch candidate for review.\"}"
+    }
+  }
+]

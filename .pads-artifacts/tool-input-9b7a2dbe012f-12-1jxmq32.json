@@ -1,0 +1,10 @@
+[
+  {
+    "id": "call_Bq5BU5HUd0w6675FP3IJjNjv",
+    "type": "function",
+    "function": {
+      "name": "sandbox_exec",
+      "arguments": "{\"command\":\"cargo fmt --all --check\",\"intent\":\"lint\",\"timeout_ms\":120000}"
+    }
+  }
+]

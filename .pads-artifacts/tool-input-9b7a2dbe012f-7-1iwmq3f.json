@@ -1,0 +1,10 @@
+[
+  {
+    "id": "call_LwlLWas7mpzVTubhKOgAjHN3",
+    "type": "function",
+    "function": {
+      "name": "read_file",
+      "arguments": "{\"path\":\"tools/tester/src/solc/yul.rs\",\"start_line\":1,\"end_line\":180}"
+    }
+  }
+]

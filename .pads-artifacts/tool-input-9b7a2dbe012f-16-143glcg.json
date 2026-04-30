@@ -1,0 +1,10 @@
+[
+  {
+    "id": "call_6RHn3LEd4NujPOPwVS9Y1G01",
+    "type": "function",
+    "function": {
+      "name": "sandbox_exec",
+      "arguments": "{\"command\":\"cargo test -p solar-tester solc::solidity::tests::routes_libyul_paths_out_of_solidity_corpus\",\"intent\":\"focused_test\",\"timeout_ms\":120000}"
+    }
+  }
+]

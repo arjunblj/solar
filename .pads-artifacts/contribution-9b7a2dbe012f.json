@@ -1,0 +1,285 @@
+{
+  "task_id": "9b7a2dbe012f",
+  "attempt_id": "9b7a2dbe012f-1",
+  "agent_id": "agent:9b7a2dbe012f",
+  "task_type": "implementation",
+  "summary": "Made Solidity corpus routing explicit with a typed CorpusRoute helper, preserved existing libyul skip reason/accounting, and added an in-file regression test for libyul vs Solidity paths.",
+  "outcome": "success",
+  "confidence": "high",
+  "patch": {
+    "diff": "diff --git a/tools/tester/src/solc/solidity.rs b/tools/tester/src/solc/solidity.rs\nindex eba5383..461e701 100644\n--- a/tools/tester/src/solc/solidity.rs\n+++ b/tools/tester/src/solc/solidity.rs\n@@ -6,13 +6,38 @@ use std::{\n     sync::atomic::{AtomicUsize, Ordering},\n };\n \n-pub(crate) fn should_skip(path: &Path) -> Result<(), &'static str> {\n-    let path_contains = path_contains_curry(path);\n+#[derive(Clone, Copy, Debug, PartialEq, Eq)]\n+enum CorpusRoute {\n+    Solidity,\n+    Yul,\n+}\n+\n+impl CorpusRoute {\n+    fn for_path(path: &Path) -> Self {\n+        let path_contains = path_contains_curry(path);\n+\n+        if path_contains(\"/libyul/\") {\n+            Self::Yul\n+        } else {\n+            Self::Solidity\n+        }\n+    }\n+\n+    fn solidity_skip_reason(self) -> Option<&'static str> {\n+        match self {\n+            Self::Solidity => None,\n+            Self::Yul => Some(\"actually a Yul test\"),\n+        }\n+    }\n+}\n \n-    if path_contains(\"/libyul/\") {\n-        return Err(\"actually a Yul test\");\n+pub(crate) fn should_skip(path: &Path) -> Result<(), &'static str> {\n+    if let Some(reason) = CorpusRoute::for_path(path).solidity_skip_reason() {\n+        return Err(reason);\n     }\n \n+    let path_contains = path_contains_curry(path);\n+\n     if path_contains(\"/cmdlineTests/\") {\n         return Err(\"CLI tests do not have the same format as everything else\");\n     }\n@@ -209,3 +234,19 @@ fn source_delim(line: &str) -> Option<&str> {\n fn external_source_delim(line: &str) -> Option<&str> {\n     line.strip_prefix(\"==== ExternalSource:\").and_then(|s| s.strip_suffix(\"====\")).map(str::trim)\n }\n+\n+#[cfg(test)]\n+mod tests {\n+    use super::*;\n+\n+    #[test]\n+    fn routes_libyul_paths_out_of_solidity_corpus() {\n+        let yul_path = Path::new(\"/repo/testdata/solidity/test/libyul/syntax/empty.yul\");\n+        assert_eq!(CorpusRoute::for_path(yul_path), CorpusRoute::Yul);\n+        assert_eq!(should_skip(yul_path), Err(\"actually a Yul test\"));\n+\n+        let solidity_path = Path::new(\"/repo/testdata/solidity/test/libsolidity/syntax/empty.sol\");\n+        assert_eq!(CorpusRoute::for_path(solidity_path), CorpusRoute::Solidity);\n+        assert_eq!(should_skip(solidity_path), Ok(()));\n+    }\n+}\n",
+    "base_commit": "10283ae5c165fe707f4edbadee4d9dce083fa35c",
+    "files_changed": [
+      "tools/tester/src/solc/solidity.rs"
+    ],
+    "lines_added": 45,
+    "lines_removed": 4
+  },
+  "patch_candidate": {
+    "candidate_id": "pc_9b7a2dbe012f_13vl9og",
+    "task_id": "9b7a2dbe012f",
+    "attempt_id": "9b7a2dbe012f-1",
+    "agent_id": "agent:9b7a2dbe012f",
+    "run_id": "run_rs_6lc2dDdlzi",
+    "session_id": "rs_6lc2dDdlzi",
+    "base_sha": "10283ae5c165fe707f4edbadee4d9dce083fa35c",
+    "head_sha": null,
+    "diff": "diff --git a/tools/tester/src/solc/solidity.rs b/tools/tester/src/solc/solidity.rs\nindex eba5383..461e701 100644\n--- a/tools/tester/src/solc/solidity.rs\n+++ b/tools/tester/src/solc/solidity.rs\n@@ -6,13 +6,38 @@ use std::{\n     sync::atomic::{AtomicUsize, Ordering},\n };\n \n-pub(crate) fn should_skip(path: &Path) -> Result<(), &'static str> {\n-    let path_contains = path_contains_curry(path);\n+#[derive(Clone, Copy, Debug, PartialEq, Eq)]\n+enum CorpusRoute {\n+    Solidity,\n+    Yul,\n+}\n+\n+impl CorpusRoute {\n+    fn for_path(path: &Path) -> Self {\n+        let path_contains = path_contains_curry(path);\n+\n+        if path_contains(\"/libyul/\") {\n+            Self::Yul\n+        } else {\n+            Self::Solidity\n+        }\n+    }\n+\n+    fn solidity_skip_reason(self) -> Option<&'static str> {\n+        match self {\n+            Self::Solidity => None,\n+            Self::Yul => Some(\"actually a Yul test\"),\n+        }\n+    }\n+}\n \n-    if path_contains(\"/libyul/\") {\n-        return Err(\"actually a Yul test\");\n+pub(crate) fn should_skip(path: &Path) -> Result<(), &'static str> {\n+    if let Some(reason) = CorpusRoute::for_path(path).solidity_skip_reason() {\n+        return Err(reason);\n     }\n \n+    let path_contains = path_contains_curry(path);\n+\n     if path_contains(\"/cmdlineTests/\") {\n         return Err(\"CLI tests do not have the same format as everything else\");\n     }\n@@ -209,3 +234,19 @@ fn source_delim(line: &str) -> Option<&str> {\n fn external_source_delim(line: &str) -> Option<&str> {\n     line.strip_prefix(\"==== ExternalSource:\").and_then(|s| s.strip_suffix(\"====\")).map(str::trim)\n }\n+\n+#[cfg(test)]\n+mod tests {\n+    use super::*;\n+\n+    #[test]\n+    fn routes_libyul_paths_out_of_solidity_corpus() {\n+        let yul_path = Path::new(\"/repo/testdata/solidity/test/libyul/syntax/empty.yul\");\n+        assert_eq!(CorpusRoute::for_path(yul_path), CorpusRoute::Yul);\n+        assert_eq!(should_skip(yul_path), Err(\"actually a Yul test\"));\n+\n+        let solidity_path = Path::new(\"/repo/testdata/solidity/test/libsolidity/syntax/empty.sol\");\n+        assert_eq!(CorpusRoute::for_path(solidity_path), CorpusRoute::Solidity);\n+        assert_eq!(should_skip(solidity_path), Ok(()));\n+    }\n+}\n",
+    "diff_hash": "13vl9og",
+    "changed_files": [
+      "tools/tester/src/solc/solidity.rs"
+    ],
+    "lines_added": 45,
+    "lines_removed": 4,
+    "file_stats": [
+      {
+        "path": "tools/tester/src/solc/solidity.rs",
+        "additions": 0,
+        "deletions": 0
+      }
+    ],
+    "task_scope": "[task_type:implementation] [track:testing-infra] Make solc corpus mode routing explicit in tools/tester/src/solc/solidity.rs with one focused in-file regression/unit test if the file structure supports it. Target files: tools/tester/src/solc/solidity.rs, tools/tester/src/lib.rs. Acceptance: mode/skip accounting has a clearer typed branch or helper, existing behavior is preserved, cargo fmt --all --check passes, and cargo check -p solar-tester is attempted or honestly blocked with the exact failure. Use a coherent patch; do not convert this into research.",
+    "acceptance_criteria": [
+      "Typed branch/helper clarifies solc Solidity corpus route handling",
+      "Existing skip reason for libyul paths preserved",
+      "Focused in-file regression test added",
+      "cargo fmt --all --check passed",
+      "cargo check -p solar-tester passed"
+    ],
+    "verification_evidence": [
+      {
+        "command": "cargo fmt --all --check",
+        "exit_code": 0,
+        "output_excerpt": "passed; rustfmt emitted unstable-option warnings only",
+        "duration_ms": 363,
+        "gate": "required"
+      },
+      {
+        "command": "cargo check -p solar-tester",
+        "exit_code": 0,
+        "output_excerpt": "Finished dev profile; solar-tester checked successfully",
+        "duration_ms": 7525,
+        "gate": "required"
+      },
+      {
+        "command": "cargo test -p solar-tester solc::solidity::tests::routes_libyul_paths_out_of_solidity_corpus",
+        "exit_code": 0,
+        "output_excerpt": "targeted in-file regression test completed successfully",
+        "duration_ms": 11253,
+        "gate": "advisory"
+      }
+    ],
+    "risk_flags": [
+      "Helper currently distinguishes only libyul vs Solidity, matching prior behavior."
+    ],
+    "reviewer_focus": [
+      "CorpusRoute naming and placement in solidity.rs",
+      "Regression path examples"
+    ],
+    "artifact_refs": [
+      ".pads-artifacts/LOCALIZATION-9b7a2dbe012f.md",
+      ".pads-artifacts/HANDOFF-9b7a2dbe012f.md"
+    ]
+  },
+  "evidence_ledger": [
+    {
+      "kind": "read",
+      "tool": "read_file",
+      "summary": "    1|# solar\n    2|\n    3|> Build Solar into a serious alternative to solc — a Rust Solidity compiler with correct frontend semantics, meaningful type-checking parity, high-quality diagnostics, competitive performance, and eventually full ",
+      "success": true,
+      "path": ".pads-artifacts/PROJECT_CONTEXT.md",
+      "created_at": "2026-04-30T21:35:58.434Z"
+    },
+    {
+      "kind": "read",
+      "tool": "workspace_read",
+      "summary": "# workspace.read\n\n## h_a818d0b6 .pads-artifacts/task-context-9b7a2dbe012f.md:1-23\n- content_hash: h_621a1648\n- total_lines: 23\n- omitted_ranges: none\n- truncated: no\n```\n    1|╔══════════════════════════════════════════════════════════════╗",
+      "success": true,
+      "path": ".pads-artifacts/task-context-9b7a2dbe012f.md",
+      "created_at": "2026-04-30T21:36:03.350Z"
+    },
+    {
+      "kind": "read",
+      "tool": "read_file",
+      "summary": "    1|use crate::utils::path_contains_curry;\n    2|use std::{\n    3|    ffi::OsString,\n    4|    fs,\n    5|    path::Path,\n    6|    sync::atomic::{AtomicUsize, Ordering},\n    7|};\n    8|\n    9|pub(crate) fn should_skip(path: &Path) -> Resu",
+      "success": true,
+      "path": "tools/tester/src/solc/solidity.rs",
+      "created_at": "2026-04-30T21:36:05.245Z"
+    },
+    {
+      "kind": "read",
+      "tool": "read_file",
+      "summary": "    1|//! Solar test runner.\n    2|//!\n    3|//! This crate is invoked in `crates/solar/tests.rs` with the path to the `solar` binary.\n    4|\n    5|#![allow(unreachable_pub)]\n    6|\n    7|use eyre::{Result, eyre};\n    8|use std::path::Path;",
+      "success": true,
+      "path": "tools/tester/src/lib.rs",
+      "created_at": "2026-04-30T21:36:08.242Z"
+    },
+    {
+      "kind": "search",
+      "tool": "search_code",
+      "summary": "./tools/tester/src/lib.rs-182-    let skip = match cfg.mode {\n./tools/tester/src/lib.rs-183-        Mode::Ui => false,\n./tools/tester/src/lib.rs:184:        Mode::SolcSolidity => solc::solidity::should_skip(path).is_err(),\n./tools/tester/sr",
+      "success": true,
+      "created_at": "2026-04-30T21:36:15.370Z"
+    },
+    {
+      "kind": "search",
+      "tool": "glob_file_search",
+      "summary": "./tools/tester/src/utils.rs\n./tools/tester/src/errors.rs\n./tools/tester/src/lib.rs\n./tools/tester/src/solc/yul.rs\n./tools/tester/src/solc/mod.rs\n./tools/tester/src/solc/solidity.rs",
+      "success": true,
+      "created_at": "2026-04-30T21:36:17.048Z"
+    },
+    {
+      "kind": "read",
+      "tool": "read_file",
+      "summary": "    1|use crate::utils::path_contains_curry;\n    2|use std::path::Path;\n    3|\n    4|pub(crate) fn should_skip(path: &Path) -> Result<(), &'static str> {\n    5|    let path_contains = path_contains_curry(path);\n    6|\n    7|    if path_cont",
+      "success": true,
+      "path": "tools/tester/src/solc/yul.rs",
+      "created_at": "2026-04-30T21:36:19.249Z"
+    },
+    {
+      "kind": "other",
+      "tool": "record_localization",
+      "summary": "Localization recorded in .pads-artifacts/LOCALIZATION-9b7a2dbe012f.md. enough_to_edit=yes",
+      "success": true,
+      "created_at": "2026-04-30T21:36:32.332Z"
+    },
+    {
+      "kind": "read",
+      "tool": "read_file",
+      "summary": "    1|use std::path::Path;\n    2|\n    3|pub(crate) fn path_contains_curry(haystack: &Path) -> impl Fn(&str) -> bool + '_ {\n    4|    let s = haystack.to_str().unwrap();\n    5|    #[cfg(windows)]\n    6|    let s = s.replace('\\\\', \"/\");\n    7",
+      "success": true,
+      "path": "tools/tester/src/utils.rs",
+      "created_at": "2026-04-30T21:36:45.035Z"
+    },
+    {
+      "kind": "edit",
+      "tool": "apply_patch",
+      "summary": "Patched tools/tester/src/solc/solidity.rs: 2 hunk(s), 41 line(s) added.",
+      "success": true,
+      "created_at": "2026-04-30T21:37:17.408Z"
+    },
+    {
+      "kind": "verification",
+      "tool": "sandbox_exec",
+      "summary": "tool=sandbox_exec status=error class=schema_invalid\nmessage: Invalid arguments for sandbox_exec.\ninvalid_fields: command Invalid input: expected string, received undefined\nfix: Example: {\"command\":\"pnpm test\",\"intent\":\"focused_test\",\"timeou",
+      "success": false,
+      "verification_gate": "advisory",
+      "created_at": "2026-04-30T21:37:21.242Z"
+    },
+    {
+      "kind": "verification",
+      "tool": "sandbox_exec",
+      "summary": "# sandbox.exec\n- command: cargo fmt --all --check\n- normalized_command: cargo fmt --all --check\n- intent: lint\n- cwd: /var/folders/2_/jrlm4hkj0v5fqt93j8dr80h80000gp/T/pads-harness-test-agent-1-k2rsiR/solar\n- exit_code: 1\n- duration_ms: 1411",
+      "success": false,
+      "command": "cargo fmt --all --check",
+      "verification_gate": "advisory",
+      "created_at": "2026-04-30T21:37:26.341Z"
+    },
+    {
+      "kind": "verification",
+      "tool": "sandbox_exec",
+      "summary": "# sandbox.exec\n- command: cargo fmt --all\n- normalized_command: cargo fmt --all\n- intent: lint\n- cwd: /var/folders/2_/jrlm4hkj0v5fqt93j8dr80h80000gp/T/pads-harness-test-agent-1-k2rsiR/solar\n- exit_code: 0\n- duration_ms: 349\n- exit_class: su",
+      "success": true,
+      "command": "cargo fmt --all",
+      "verification_gate": "advisory",
+      "created_at": "2026-04-30T21:37:30.418Z"
+    },
+    {
+      "kind": "verification",
+      "tool": "sandbox_exec",
+      "summary": "# sandbox.exec\n- command: cargo fmt --all --check\n- normalized_command: cargo fmt --all --check\n- intent: lint\n- cwd: /var/folders/2_/jrlm4hkj0v5fqt93j8dr80h80000gp/T/pads-harness-test-agent-1-k2rsiR/solar\n- exit_code: 0\n- duration_ms: 363\n",
+      "success": true,
+      "command": "cargo fmt --all --check",
+      "verification_gate": "advisory",
+      "created_at": "2026-04-30T21:37:32.694Z"
+    },
+    {
+      "kind": "verification",
+      "tool": "sandbox_exec",
+      "summary": "# sandbox.exec\n- command: cargo check -p solar-tester\n- normalized_command: cargo check -p solar-tester\n- intent: build\n- cwd: /var/folders/2_/jrlm4hkj0v5fqt93j8dr80h80000gp/T/pads-harness-test-agent-1-k2rsiR/solar\n- exit_code: 0\n- duration",
+      "success": true,
+      "command": "cargo check -p solar-tester",
+      "verification_gate": "advisory",
+      "created_at": "2026-04-30T21:37:42.658Z"
+    },
+    {
+      "kind": "verification",
+      "tool": "sandbox_exec",
+      "summary": "# sandbox.exec\n- command: cargo test -p solar-tester solc::solidity::tests::routes_libyul_paths_out_of_solidity_corpus\n- normalized_command: cargo test -p solar-tester solc::solidity::tests::routes_libyul_paths_out_of_solidity_corpus\n- inte",
+      "success": true,
+      "command": "cargo test -p solar-tester solc::solidity::tests::routes_libyul_paths_out_of_solidity_corpus",
+      "verification_gate": "advisory",
+      "created_at": "2026-04-30T21:37:56.169Z"
+    },
+    {
+      "kind": "other",
+      "tool": "update_task_progress",
+      "summary": "Task progress updated: solc-corpus-mode-routing -> passes. Artifacts: .pads-artifacts/feature-list-9b7a2dbe012f.json, .pads-artifacts/worker-progress-9b7a2dbe012f.txt",
+      "success": true,
+      "created_at": "2026-04-30T21:37:59.907Z"
+    },
+    {
+      "kind": "read",
+      "tool": "read_file",
+      "summary": "    1|use crate::utils::path_contains_curry;\n    2|use std::{\n    3|    ffi::OsString,\n    4|    fs,\n    5|    path::Path,\n    6|    sync::atomic::{AtomicUsize, Ordering},\n    7|};\n    8|\n    9|#[derive(Clone, Copy, Debug, PartialEq, Eq)]\n ",
+      "success": true,
+      "path": "tools/tester/src/solc/solidity.rs",
+      "created_at": "2026-04-30T21:38:01.678Z"
+    },
+    {
+      "kind": "submit",
+      "tool": "submit_patch_candidate",
+      "summary": "Patch candidate intent accepted; runtime will attach the git diff: Made Solidity corpus routing explicit with a typed CorpusRoute helper, preserved existing libyul skip reason/accounting,",
+      "success": true,
+      "created_at": "2026-04-30T21:38:10.554Z"
+    }
+  ],
+  "experiments": [
+    {
+      "command": "",
+      "exit_code": 1,
+      "stdout_summary": "tool=sandbox_exec status=error class=schema_invalid\nmessage: Invalid arguments for sandbox_exec.\ninvalid_fields: command Invalid input: expected string, received undefined\nfix: Example: {\"command\":\"pnpm test\",\"intent\":\"focused_test\",\"timeout_ms\":120000}. Returns exit class, artifact refs, and changed paths.\nnext_action_hint: retry this tool once with corrected arguments, or use the sibling tool named in the fix hint.\nretryable: yes with corrected arguments",
+      "stderr_summary": "",
+      "duration_ms": 0
+    },
+    {
+      "command": "cargo fmt --all --check",
+      "exit_code": 1,
+      "stdout_summary": "# sandbox.exec\n- command: cargo fmt --all --check\n- normalized_command: cargo fmt --all --check\n- intent: lint\n- cwd: /var/folders/2_/jrlm4hkj0v5fqt93j8dr80h80000gp/T/pads-harness-test-agent-1-k2rsiR/solar\n- exit_code: 1\n- duration_ms: 1411\n- exit_class: command_failed\n- changed_paths: tools/tester/src/solc/solidity.rs, .pads-artifacts/, solar/\n- artifact: .pads-artifacts/sandbox-exec-1777585046340-540f776c.log\n## First Failure Block\n<none detected>\n## Last Output Lines\nWarning: can't set `doc_c",
+      "stderr_summary": "",
+      "duration_ms": 1411
+    },
+    {
+      "command": "cargo fmt --all",
+      "exit_code": 0,
+      "stdout_summary": "# sandbox.exec\n- command: cargo fmt --all\n- normalized_command: cargo fmt --all\n- intent: lint\n- cwd: /var/folders/2_/jrlm4hkj0v5fqt93j8dr80h80000gp/T/pads-harness-test-agent-1-k2rsiR/solar\n- exit_code: 0\n- duration_ms: 349\n- exit_class: success\n- changed_paths: tools/tester/src/solc/solidity.rs, .pads-artifacts/, solar/\n- artifact: .pads-artifacts/sandbox-exec-1777585050417-ee5a888a.log\n## First Failure Block\n<none detected>\n## Last Output Lines\nWarning: can't set `doc_comment_code_block_width ",
+      "stderr_summary": "",
+      "duration_ms": 349
+    },
+    {
+      "command": "cargo fmt --all --check",
+      "exit_code": 0,
+      "stdout_summary": "# sandbox.exec\n- command: cargo fmt --all --check\n- normalized_command: cargo fmt --all --check\n- intent: lint\n- cwd: /var/folders/2_/jrlm4hkj0v5fqt93j8dr80h80000gp/T/pads-harness-test-agent-1-k2rsiR/solar\n- exit_code: 0\n- duration_ms: 363\n- exit_class: success\n- changed_paths: tools/tester/src/solc/solidity.rs, .pads-artifacts/, solar/\n- artifact: .pads-artifacts/sandbox-exec-1777585052694-4ccc69be.log\n## First Failure Block\n<none detected>\n## Last Output Lines\nWarning: can't set `doc_comment_c",
+      "stderr_summary": "",
+      "duration_ms": 363
+    },
+    {
+      "command": "cargo check -p solar-tester",
+      "exit_code": 0,
+      "stdout_summary": "# sandbox.exec\n- command: cargo check -p solar-tester\n- normalized_command: cargo check -p solar-tester\n- intent: build\n- cwd: /var/folders/2_/jrlm4hkj0v5fqt93j8dr80h80000gp/T/pads-harness-test-agent-1-k2rsiR/solar\n- exit_code: 0\n- duration_ms: 7525\n- exit_class: success\n- changed_paths: tools/tester/src/solc/solidity.rs, .pads-artifacts/, solar/\n## First Failure Block\nCompiling eyre v0.6.12\n    Checking regex-syntax v0.8.9\n    Checking tracing-error v0.2.1\n    Checking addr2line v0.25.1\n    Che",
+      "stderr_summary": "",
+      "duration_ms": 7525
+    },
+    {
+      "command": "cargo test -p solar-tester solc::solidity::tests::routes_libyul_paths_out_of_solidity_corpus",
+      "exit_code": 0,
+      "stdout_summary": "# sandbox.exec\n- command: cargo test -p solar-tester solc::solidity::tests::routes_libyul_paths_out_of_solidity_corpus\n- normalized_command: cargo test -p solar-tester solc::solidity::tests::routes_libyul_paths_out_of_solidity_corpus\n- intent: focused_test\n- cwd: /var/folders/2_/jrlm4hkj0v5fqt93j8dr80h80000gp/T/pads-harness-test-agent-1-k2rsiR/solar\n- exit_code: 0\n- duration_ms: 11253\n- exit_class: success\n- changed_paths: tools/tester/src/solc/solidity.rs, .pads-artifacts/, solar/\n## First Fail",
+      "stderr_summary": "",
+      "duration_ms": 11253
+    }
+  ],
+  "follow_ups": [],
+  "tokens_used": 326660,
+  "cost_usd": 0.5563140000000001,
+  "duration_ms": 136402
+}

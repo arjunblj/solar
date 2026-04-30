@@ -1,0 +1,10 @@
+[
+  {
+    "id": "call_7DvM339RxhLrp3zYiJt7xebu",
+    "type": "function",
+    "function": {
+      "name": "glob_file_search",
+      "arguments": "{\"glob\":\"tools/tester/src/**/*.rs\",\"max_results\":50}"
+    }
+  }
+]

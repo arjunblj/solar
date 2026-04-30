@@ -1,0 +1,10 @@
+[
+  {
+    "id": "call_z7eL37iFYqTbpEXm1cTdl9C1",
+    "type": "function",
+    "function": {
+      "name": "sandbox_exec",
+      "arguments": "{\"command\":\"cargo fmt --all\",\"intent\":\"lint\",\"timeout_ms\":120000}"
+    }
+  }
+]

@@ -1,0 +1,10 @@
+[
+  {
+    "id": "call_p0h1Jjz51tc5ail4OcOvq1MW",
+    "type": "function",
+    "function": {
+      "name": "sandbox_exec",
+      "arguments": "{\"command\":\"cargo fmt --all --check\",\"intent\":\"lint\",\"timeout_ms\":120000}{\"command\":\"cargo check -p solar-tester\",\"intent\":\"build\",\"timeout_ms\":120000}"
+    }
+  }
+]

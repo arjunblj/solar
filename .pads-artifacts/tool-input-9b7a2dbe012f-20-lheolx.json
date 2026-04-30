@@ -1,0 +1,10 @@
+[
+  {
+    "id": "call_gOPod6poKWRNhOaUvE4e3c6S",
+    "type": "function",
+    "function": {
+      "name": "submit_patch_candidate",
+      "arguments": "{\"task_id\":\"9b7a2dbe012f\",\"attempt_id\":\"9b7a2dbe012f-1\",\"agent_id\":\"agent:9b7a2dbe012f\",\"summary\":\"Made Solidity corpus routing explicit with a typed CorpusRoute helper, preserved existing libyul skip reason/accounting, and added an in-file regression test for libyul vs Solidity paths.\",\"outcome\":\"success\",\"confidence\":\"high\",\"verification_evidence\":[{\"command\":\"cargo fmt --all --check\",\"exit_code\":0,\"output_excerpt\":\"passed; rustfmt emitted unstable-option warnings only\",\"duration_ms\":363,\"gate\":\"required\"},{\"command\":\"cargo check -p solar-tester\",\"exit_code\":0,\"output_excerpt\":\"Finished dev profile; solar-tester checked successfully\",\"duration_ms\":7525,\"gate\":\"required\"},{\"command\":\"cargo test -p solar-tester solc::solidity::tests::routes_libyul_paths_out_of_solidity_corpus\",\"exit_code\":0,\"output_excerpt\":\"targeted in-file regression test completed successfully\",\"duration_ms\":11253,\"gate\":\"advisory\"}],\"acceptance_criteria\":[\"Typed branch/helper clarifies solc Solidity corpus route handling\",\"Existing skip reason for libyul paths preserved\",\"Focused in-file regression test added\",\"cargo fmt --all --check passed\",\"cargo check -p solar-tester passed\"],\"risk_notes\":[\"Helper currently distinguishes only libyul vs Solidity, matching prior behavior.\"],\"reviewer_focus\":[\"CorpusRoute naming and placement in solidity.rs\",\"Regression path examples\"],\"follow_ups\":[]}"
+    }
+  }
+]

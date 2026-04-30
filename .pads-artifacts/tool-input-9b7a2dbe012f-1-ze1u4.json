@@ -1,0 +1,10 @@
+[
+  {
+    "id": "call_Nu4wKGDyaT75JH4chgnAmqdD",
+    "type": "function",
+    "function": {
+      "name": "read_file",
+      "arguments": "{\"path\":\".pads-artifacts/PROJECT_CONTEXT.md\",\"start_line\":1,\"end_line\":200}{\"path\":\".pads-artifacts/task-context-9b7a2dbe012f.md\",\"start_line\":1,\"end_line\":200}{\"path\":\".pads-artifacts/task-rules-9b7a2dbe012f.md\",\"start_line\":1,\"end_line\":200}{\"path\":\".pads-artifacts/worker-progress-9b7a2dbe012f.txt\",\"start_line\":1,\"end_line\":200}"
+    }
+  }
+]
