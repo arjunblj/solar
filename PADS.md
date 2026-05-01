@@ -50,6 +50,25 @@ tier0:
     - Tier-1 edits need critic-agent review + human approval.
     - System memory (lessons, rejected ideas, rules, status) lives in the pads platform, not in this repo.
 
+campaign_state:
+  epoch: "2026-05-01"
+  fork_main_commit: "10283ae5c165fe707f4edbadee4d9dce083fa35c"
+  upstream_main_commit: "d79be54cb8ffb398b8185d1c3c12b387c745835c"
+  refresh_before_dispatch: true
+  refresh_items:
+    - fork open issues and pull requests
+    - upstream main/head refs for watched branches
+    - upstream pull request state for referenced PRs
+    - current solc Solidity and Yul corpus totals and skip counts
+    - current -Ztypeck exposure and UI/typeck test counts
+
+completion_contract:
+  - Solar accepts the same modern Solidity project inputs as solc for the tracked frontend and project-ingestion corpus.
+  - Solar rejects invalid programs with stable, useful diagnostics that are covered by owned UI fixtures and solc reference evidence.
+  - Solar can replay Standard JSON/build-info inputs from production corpora and explain every unsupported output field.
+  - Solar codegen claims are backed by bytecode or runtime differential evidence, not compile-only checks.
+  - Every merged autonomous PR makes the next frontier clearer through visible verification, corpus deltas, or a precise blocker artifact.
+
 oracles:
   - { id: cargo.check,           kind: shell, tier: prerequisite, command: "cargo check --workspace" }
   - { id: cargo.build,           kind: shell, tier: prerequisite, command: "cargo build --workspace" }
@@ -99,6 +118,21 @@ corpora:
     setup: ["forge build --force --build-info --build-info-path out/build-info"]
     proves: ["modern Foundry profiles", "hooks", "transient-storage-era code", "viaIR pressure"]
     does_not_prove: ["Solar runtime correctness until Solar bytecode can be compared and executed"]
+
+pr_queue_policy:
+  max_open_autonomous_drafts: 3
+  max_open_prs_touching_same_primary_file: 1
+  before_opening_pr:
+    - search fork issues and pull requests for overlapping work
+    - close or supersede obsolete generated issues before fresh ingest
+    - reject zero-diff pull requests before GitHub publication
+    - reject .pads-artifacts, sandbox logs, raw local traces, and workspace artifacts in diffs
+    - include at least one focused oracle result or an explicit blocker in the PR body
+  ready_for_review_requires:
+    - local required gates or focused task oracles pass with visible evidence
+    - an independent reviewer agent judges the diff coherent and mergeable in substance
+    - GitHub CI failures are classified as required, advisory, flaky, or baseline-noisy
+    - known skipped or deferred checks are justified in the PR body
 
 branch_policy:
   default_upstream_mode: reference_only
