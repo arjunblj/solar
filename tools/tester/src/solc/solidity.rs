@@ -6,51 +6,51 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
-pub(crate) fn should_skip(path: &Path) -> Result<(), &'static str> {
+pub(crate) fn should_skip(path: &Path) -> Result<(), SkipReason> {
     let path_contains = path_contains_curry(path);
 
     if path_contains("/libyul/") {
-        return Err("actually a Yul test");
+        return Err(SkipReason::YulTest);
     }
 
     if path_contains("/cmdlineTests/") {
-        return Err("CLI tests do not have the same format as everything else");
+        return Err(SkipReason::CmdlineTest);
     }
 
     if path_contains("/lsp/") {
-        return Err("LSP tests do not have the same format as everything else");
+        return Err(SkipReason::LspTest);
     }
 
     if path_contains("/ASTJSON/") {
-        return Err("no JSON AST");
+        return Err(SkipReason::JsonAst);
     }
 
     if path_contains("/functionDependencyGraphTests/") || path_contains("/experimental") {
-        return Err("solidity experimental is not implemented");
+        return Err(SkipReason::Experimental);
     }
 
     // We don't parse licenses.
     if path_contains("/license/") {
-        return Err("licenses are not checked");
+        return Err(SkipReason::License);
     }
 
     if path_contains("natspec") {
-        return Err("natspec is not checked");
+        return Err(SkipReason::NatSpec);
     }
 
     if path_contains("_direction_override") {
-        return Err("Unicode direction override checks not implemented");
+        return Err(SkipReason::DirectionOverride);
     }
 
     if path_contains("wrong_compiler_") {
-        return Err("Solidity pragma version is not checked");
+        return Err(SkipReason::PragmaVersion);
     }
 
     // Directories starting with `_` are not tests.
     if path_contains("/_")
         && !path.components().next_back().unwrap().as_os_str().to_str().unwrap().starts_with('_')
     {
-        return Err("supporting file");
+        return Err(SkipReason::SupportingFile);
     }
 
     let stem = path.file_stem().unwrap().to_str().unwrap();
@@ -106,10 +106,77 @@ pub(crate) fn should_skip(path: &Path) -> Result<(), &'static str> {
         | "mapping_nonelementary_key_1"
         | "mapping_nonelementary_key_4"
     ) {
-        return Err("manually skipped");
+        return Err(SkipReason::Manual);
     };
 
     Ok(())
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SkipReason {
+    CmdlineTest,
+    DirectionOverride,
+    Experimental,
+    JsonAst,
+    License,
+    LspTest,
+    Manual,
+    NatSpec,
+    PragmaVersion,
+    SupportingFile,
+    YulTest,
+}
+
+impl SkipReason {
+    pub(crate) const fn label(self) -> &'static str {
+        match self {
+            Self::CmdlineTest => "cmdline-test",
+            Self::DirectionOverride => "direction-override",
+            Self::Experimental => "experimental",
+            Self::JsonAst => "json-ast",
+            Self::License => "license",
+            Self::LspTest => "lsp-test",
+            Self::Manual => "manual",
+            Self::NatSpec => "natspec",
+            Self::PragmaVersion => "pragma-version",
+            Self::SupportingFile => "supporting-file",
+            Self::YulTest => "yul-test",
+        }
+    }
+
+    pub(crate) const fn description(self) -> &'static str {
+        match self {
+            Self::CmdlineTest => "CLI tests do not have the same format as everything else",
+            Self::DirectionOverride => "Unicode direction override checks not implemented",
+            Self::Experimental => "solidity experimental is not implemented",
+            Self::JsonAst => "no JSON AST",
+            Self::License => "licenses are not checked",
+            Self::LspTest => "LSP tests do not have the same format as everything else",
+            Self::Manual => "manually skipped",
+            Self::NatSpec => "natspec is not checked",
+            Self::PragmaVersion => "Solidity pragma version is not checked",
+            Self::SupportingFile => "supporting file",
+            Self::YulTest => "actually a Yul test",
+        }
+    }
+}
+
+impl std::fmt::Display for SkipReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.label(), self.description())
+    }
+}
+
+pub(crate) fn base_args() -> Vec<&'static str> {
+    let mut args = vec!["-j1", "--error-format=rustc-json", "-Zui-testing", "-Zparse-yul"];
+    append_canary_args(&mut args);
+    args
+}
+
+fn append_canary_args(args: &mut Vec<&'static str>) {
+    // Keep future corpus canaries in one obvious place. Once the Solidity corpus can run semantic
+    // checks broadly, append `-Ztypeck` here instead of scattering mode-specific argv edits.
+    let _ = args;
 }
 
 /// Handles `====` delimiters in a solc test file, and creates temporary files as necessary.
