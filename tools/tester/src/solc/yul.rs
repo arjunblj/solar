@@ -1,15 +1,50 @@
 use crate::utils::path_contains_curry;
 use std::path::Path;
 
-pub(crate) fn should_skip(path: &Path) -> Result<(), &'static str> {
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(crate) enum Outcome {
+    Run,
+    RecursionStackOverflow,
+    UnsupportedBuiltin,
+    InvalidSolcIdentifier,
+    ParserOutOfScope,
+    NotYul,
+    ManualSkip,
+}
+
+impl Outcome {
+    pub(crate) const ALL: [Self; 7] = [
+        Self::Run,
+        Self::RecursionStackOverflow,
+        Self::UnsupportedBuiltin,
+        Self::InvalidSolcIdentifier,
+        Self::ParserOutOfScope,
+        Self::NotYul,
+        Self::ManualSkip,
+    ];
+
+    pub(crate) const fn label(self) -> &'static str {
+        match self {
+            Self::Run => "run",
+            Self::RecursionStackOverflow => "skip:recursion-stack-overflow",
+            Self::UnsupportedBuiltin => "skip:unsupported-builtin",
+            Self::InvalidSolcIdentifier => "skip:invalid-solc-identifier",
+            Self::ParserOutOfScope => "skip:parser-out-of-scope",
+            Self::NotYul => "skip:not-yul",
+            Self::ManualSkip => "skip:manual",
+        }
+    }
+}
+
+pub(crate) fn outcome(path: &Path) -> Outcome {
     let path_contains = path_contains_curry(path);
 
     if path_contains("/recursion_depth.yul") {
-        return Err("recursion stack overflow");
+        return Outcome::RecursionStackOverflow;
     }
 
     if path_contains("/verbatim") {
-        return Err("verbatim Yul builtin is not implemented");
+        return Outcome::UnsupportedBuiltin;
     }
 
     if path_contains("/period_in_identifier")
@@ -19,16 +54,16 @@ pub(crate) fn should_skip(path: &Path) -> Result<(), &'static str> {
         // Why does Solc parse periods as part of Yul identifiers?
         // `yul-identifier` is the same as `solidity-identifier`, which disallows periods:
         // https://docs.soliditylang.org/en/latest/grammar.html#a4.SolidityLexer.YulIdentifier
-        return Err("not actually valid identifiers");
+        return Outcome::InvalidSolcIdentifier;
     }
 
     if path_contains("objects/conflict_") || path_contains("objects/code.yul") {
         // Not the parser's job to check conflicting names.
-        return Err("not implemented in the parser");
+        return Outcome::ParserOutOfScope;
     }
 
     if path_contains(".sol") {
-        return Err("not a Yul file");
+        return Outcome::NotYul;
     }
 
     let stem = path.file_stem().unwrap().to_str().unwrap();
@@ -69,8 +104,15 @@ pub(crate) fn should_skip(path: &Path) -> Result<(), &'static str> {
         | "clash_with_reserved_pure_yul_builtin"
         | "clz"
     ) {
-        return Err("manually skipped");
+        return Outcome::ManualSkip;
     };
 
-    Ok(())
+    Outcome::Run
+}
+
+pub(crate) fn should_skip(path: &Path) -> Result<(), Outcome> {
+    match outcome(path) {
+        Outcome::Run => Ok(()),
+        outcome => Err(outcome),
+    }
 }
