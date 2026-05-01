@@ -55,7 +55,7 @@ pub(crate) fn should_skip(path: &Path) -> Result<(), &'static str> {
 
     let stem = path.file_stem().unwrap().to_str().unwrap();
     #[rustfmt::skip]
-    if matches!(
+    let skip_reason = if matches!(
         stem,
         // Exponent is too large, but apparently it's fine in Solc because the result is 0 or it gets evaluated at compile time.
         | "rational_number_exp_limit_fine"
@@ -94,6 +94,24 @@ pub(crate) fn should_skip(path: &Path) -> Result<(), &'static str> {
         // Validation is in solar's AST stage (https://github.com/paradigmxyz/solar/pull/120).
         | "empty_enum"
 
+    ) {
+        Some("manually skipped")
+    } else if needs_typeck(stem) {
+        Some("requires -Ztypeck")
+    } else {
+        None
+    };
+
+    if let Some(reason) = skip_reason {
+        return Err(reason);
+    }
+
+    Ok(())
+}
+
+fn needs_typeck(stem: &str) -> bool {
+    matches!(
+        stem,
         // Data locations are checked after parsing.
         | "stopAfterParsingError"
         | "state_variable_storage_named_transient"
@@ -105,11 +123,7 @@ pub(crate) fn should_skip(path: &Path) -> Result<(), &'static str> {
         // Mapping key types are checked in sema.
         | "mapping_nonelementary_key_1"
         | "mapping_nonelementary_key_4"
-    ) {
-        return Err("manually skipped");
-    };
-
-    Ok(())
+    )
 }
 
 /// Handles `====` delimiters in a solc test file, and creates temporary files as necessary.
