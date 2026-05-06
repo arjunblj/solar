@@ -2,16 +2,21 @@
 pads_version: 2
 preset: compiler
 spec_status: active
-last_revised: "2026-05-05"
-revision_trigger: evidence
+last_revised: "2026-05-06"
+revision_trigger: planner_quality_reset
 
 tier0:
   project:
     slug: arjunblj/solar
     mission: >
-      Make Solar a drop-in solc-compatible Solidity 0.8.x compiler, faster
-      than solc on real developer workflows, then use that correctness and
-      performance shell for speculative EVM compiler research.
+      Make Solar a credible drop-in replacement for solc on the Solidity 0.8.x
+      workflows real toolchains depend on: Standard JSON input and output,
+      multi-file project compilation, structural diagnostics, ABI and metadata
+      artifacts, source maps, storage layout, bytecode objects, and runtime
+      behavior measurable against pinned solc builds. After correctness for a
+      surface is measured, beat solc on it on real developer workflows. Use
+      that correctness and performance shell as the safe substrate for
+      speculative EVM compiler research.
     upstream:
       full_name: paradigmxyz/solar
       policy: reference_only
@@ -64,6 +69,7 @@ tier0:
     - Tier-0 edits require updating PADS.md, .pads/spec.json, and .pads/tier0.sha256 together.
     - Project-specific Solar, solc, Foundry, corpus, and maintainer context belongs here or under .pads, never in pads core.
     - New durable campaign facts should first go to wiki, memory, tracking issues, or follow-up PRs; update PADS.md when the fact becomes stable project policy.
+    - This file is policy, context, and a senior-engineer briefing. It is not a backlog template. Generated GitHub issues should be substantial components of work that yield meaningful PRs, not a mechanical decomposition of this file's headings, tracks, oracles, or tier numbers.
 
 campaign_state:
   epoch: "2026-05-05"
@@ -264,19 +270,31 @@ tracks:
     scope: ["research/**", "crates/**", "tools/**"]
     required_oracles: [research.artifact]
 
-priority_order:
-  - compatibility-matrix
-  - standard-json
-  - typeck-corpus
-  - foundry-hardhat
-  - runtime-equivalence
-  - mir-codegen
-  - parser-ast-diagnostics
-  - abi-natspec-sourcemaps
-  - yul-hir-boundary
-  - performance
-  - fuzz-metamorphic
-  - speculative-research
+north_star_components:
+  - title: Standard JSON process contract
+    outcome: solar --standard-json behaves like the compiler syscall real Solidity tools expect, including stdin/stdout shape, settings subset, output selection, and structurally compatible errors.
+  - title: Project import and source identity semantics
+    outcome: source-unit names, base/include/allow paths, remappings, and metadata-sensitive paths line up with solc for real multi-file projects so downstream tools key contracts and errors the same way.
+  - title: Structural diagnostics and typechecker corpus
+    outcome: parser, AST, diagnostics, and typechecking are measured against pinned solc on owned fixtures and corpus slices with stable counters and explicit xfail accounting.
+  - title: Artifact emission surface
+    outcome: ABI, NatSpec userdoc/devdoc, metadata (string and CBOR), storage layout, method identifiers, and source maps are produced through the Standard JSON path downstream tools consume.
+  - title: Executable compiler spine
+    outcome: HIR or sema state lowers through reviewable IR slices into an EVM assembler, bytecode objects, link references, immutable references, and metadata, with normalized differential evidence against solc.
+  - title: Runtime equivalence
+    outcome: Solar-built bytecode executes against pinned solc bytecode on a runtime corpus comparing returns, reverts, logs, storage, and gas class.
+  - title: Foundry and Hardhat replay
+    outcome: real project compiler inputs (foundry.toml, remappings, build-info, OpenZeppelin/Solady/Solmate/Uniswap/Seaport-class corpora) replay through Solar with declared output parity or explicit unsupported ledgers.
+  - title: Correctness-gated speed
+    outcome: Solar gets faster only on surfaces whose correctness oracle already passes, with paired same-environment baselines, profiles, and before/after evidence.
+
+planning_guidance:
+  - The initial generated GitHub issue list should be substantial components-of-work, each one a meaningful PR a senior engineer would land. The master issue should explain how those components fit together end-to-end, link them, and describe what shipped looks like. The master issue is not itself a PR.
+  - Every issue should describe what the change is, the engineering approach, how to know it is done (testing/checks), and any related issues. Do not include time estimates, deadlines, line-of-code budgets, file-count targets, or scope-class enums in the issue body. Size work by the behavior it produces and the proof it requires.
+  - Do not generate research-question issues ("What is...?", "Which...?", "Investigate...") when a senior engineer can infer the next engineering move from this charter, the repository, the reference compiler, and the needs of downstream toolchains. If a real decision is genuinely blocking, capture it as planner research, not as a public issue.
+  - Do not decompose one coherent component into many small chore issues. Group the production change, the fixtures, and the verifier together when they prove one invariant. A component that needs a new harness, new fixtures, and a production change is one issue.
+  - Do not parrot this file's track names or oracle ladder tier numbers into the issue list. Tracks and oracles are project policy and verification grammar. Issues are concrete components of compiler work.
+  - The track ladder, watchlist, and oracle definitions exist so generated work cannot overclaim. They do not define what to ship. The plan should reflect what a senior engineer would actually do to move Solar toward the completion contract; the policy here ensures the proof boundary stays honest.
 
 oracles:
   - { id: cargo.fmt, kind: shell, tier: prerequisite, command: "cargo +nightly fmt --all --check" }
@@ -433,63 +451,17 @@ extensions:
       - "Foundry integration and mixed solc/Solar runtime testing are first-class."
       - "Performance only matters with correctness and benchmark evidence."
 
-starter_tasks:
-  - title: Build the compatibility matrix and current baseline ledger
-    description: >
-      Snapshot Solar against the declared compatibility surfaces, current fork and upstream SHAs,
-      solc 0.8.31, selected corpus commands, and known unsupported features. Produce a durable
-      matrix that future tasks can update.
-    expected_output: A compatibility matrix artifact plus execution-ready tasks for the highest-value gaps.
-    track_id: compatibility-matrix
-    task_type: implementation
-    task_size: large_pr
-    reference_ids: ["paradigmxyz/solar#1"]
-    verification_hint: "cargo nextest run --workspace; cargo uitest; selected solc corpus command"
-  - title: Create the solc/Solar Standard JSON differential root
-    description: >
-      Build the smallest repeatable Standard JSON comparison harness for errors, sources, contracts,
-      ABI, method identifiers, storage layout, and explicit unsupported fields.
-    expected_output: A reviewable harness PR with fixtures, normalized diff artifacts, and proof boundaries.
-    track_id: standard-json
-    task_type: implementation
-    task_size: milestone_pr
-    reference_ids: ["https://docs.soliditylang.org/en/latest/using-the-compiler.html"]
-    verification_hint: "solc --standard-json < input.json; solar --standard-json < input.json; diff normalized outputs"
-  - title: Enable a measurable solc TypeError corpus slice under -Ztypeck
-    description: >
-      Use upstream #615/#663/#737 as reference to expose one TypeError category, record before/after
-      eligible/pass/fail/skip counts, and port the first reduced gaps into Solar-owned UI fixtures.
-    expected_output: A typeck corpus PR with counts, fixtures, and next gap tasks.
-    track_id: typeck-corpus
-    task_type: implementation
-    task_size: large_pr
-    reference_ids: ["paradigmxyz/solar#615", "paradigmxyz/solar#663", "paradigmxyz/solar#737"]
-    verification_hint: "cargo uitest; TESTER_MODE=solc-solidity cargo nextest run -p solar-compiler --test tests"
-  - title: Design and implement the bytecode/runtime equivalence MVP
-    description: >
-      Start from #687/#704 and build the minimum mixed solc/Solar loop that can compile small contracts,
-      normalize metadata, deploy both outputs, and compare returns, reverts, logs, state, and gas.
-    expected_output: Runtime equivalence MVP with 5-10 fixtures or a precise blocker artifact.
-    track_id: runtime-equivalence
-    task_type: implementation
-    task_size: milestone_pr
-    reference_ids: ["paradigmxyz/solar#687", "paradigmxyz/solar#704", "paradigmxyz/solar#749"]
-    verification_hint: "revm/Anvil differential fixture command once implemented"
-  - title: Extract the MIR/codegen branch train
-    description: >
-      Treat feat/codegen-mir as a source branch. Produce branch trains for MIR text/validator/pass
-      manager, liveness, phi elimination, stack scheduling, assembler, and HIR-to-MIR lowering.
-    expected_output: A dependency graph plus first importable PR slice with source commits and omitted work.
-    track_id: mir-codegen
-    task_type: research
-    task_size: milestone_pr
-    reference_ids: ["paradigmxyz/solar#693", "paradigmxyz/solar#749", "paradigmxyz/solar#687"]
-    reference_only: true
-    verification_hint: "git compare main...feat/codegen-mir; cite commit hashes"
+non_goals:
+  - SMTChecker parity unless separately approved.
+  - Legacy Solidity language modes outside the declared 0.8.x compatibility surface.
+  - Documentation-only churn that does not unlock implementation or verification.
+  - Bytecode, runtime, optimizer, or performance claims ahead of the oracles required to prove them.
 ---
 # Solar Autonomous Compiler Campaign
 
-This file is the kickoff brief and operating constitution for autonomous work on `arjunblj/solar`. It is intentionally long. It gives pads enough stable project context to generate large, compounding compiler work without a human writing every PR upfront.
+This file is the kickoff brief and operating constitution for autonomous work on `arjunblj/solar`. It is intentionally long. It is policy, project context, and the senior-engineer briefing a strong team would want before picking up Solar cold.
+
+It is not a backlog. The structured sections above (`tracks`, `oracles`, `corpora`, `watchlist`, `extensions`) are project policy and verification grammar. They keep generated work honest. They do not enumerate which PRs to open. The `north_star_components` and `planning_guidance` blocks describe the shape of the work that should be planned. Everything below is project context a planner reads to write a real engineering plan.
 
 The run should assume this mission when no explicit user prompt is supplied. The orchestrator should continuously discover, localize, rank, implement, review, publish, merge, and replenish work until the original mission is complete or remaining work is low value.
 
@@ -500,11 +472,11 @@ The first no-mission kickoff should not wait for a human to enumerate work. The 
 1. Bootstrap with `.pads/setup.sh` and record the exact tool versions.
 2. Read this `PADS.md`, `AGENTS.md`, `.pads/spec.json`, the fork diff, upstream issue/PR watchlist, and current CI status.
 3. Refresh `campaign_state` in memory/wiki/tracking artifacts before dispatching code work: fork head, upstream head, open fork PRs, unsafe dependency updates, failing checks, and corpus counts.
-4. Build the first planner output as a campaign graph, not a todo list: work packages, branch trains, reviewable PR slices, dependencies, and oracle tiers.
-5. Create a master GitHub issue for the Solar completion campaign, then spawn linked sub-issues from it. The master issue should summarize the north star, phase model, tracks, current baseline, proof tiers, and live dashboard links. Sub-issues should be the planner's durable work packages and branch trains, not one-line chores.
-6. Seed from `starter_tasks`, but treat them as examples and calibration slices. Generate more tasks from the project brief, current repo evidence, upstream references, corpus failures, worker handoffs, and review outcomes.
-7. Start with the highest-leverage correctness and measurement work: compatibility matrix, Standard JSON root, typeck corpus exposure, Foundry/build-info replay, and bytecode/runtime equivalence scaffolding.
-8. Do not dispatch codegen, runtime, optimizer, or performance claims unless the task names the proof tier and current missing dependencies.
+4. Plan the work the way a staff engineer would. Read the repo, this charter, the reference compiler, and the needs of downstream toolchains, then write a real engineering plan: substantial components-of-work that move Solar toward the completion contract.
+5. Create one master GitHub issue for the Solar completion campaign, then open one linked issue per substantial component. The master issue should explain the full path to completion, the current baseline, the north-star components, the proof boundary policy, and how the linked component issues fit together. The component issues should describe what changes, the engineering approach, the testing/checks that prove the change, and any related issues.
+6. Do not seed issues from this file's headings, tracks, oracles, or tiers. Do not generate "Investigate ..." or "What ...?" issues when the next engineering move is inferable. Do not anchor work to dates, durations, file counts, or line counts. Size work by the behavior and proof it needs.
+7. Start with the highest-leverage correctness and measurement work, not with isolated parity chores. Standard JSON I/O, project import semantics, structural diagnostics, artifact emission through Standard JSON, and the executable compiler spine are connected; group changes so a single PR proves an invariant a maintainer can review.
+8. Do not dispatch codegen, runtime, optimizer, or performance claims unless the work states the proof tier it can support and the missing dependencies.
 9. Preserve context after every completed or blocked worker: what changed, what failed, decisive evidence, next dependency, and the track it belongs to.
 10. Keep running until the orchestrator can explain that the original mission is complete or remaining work is low value.
 
@@ -541,7 +513,7 @@ Do not force Solar into tiny tasks. Plan in this hierarchy:
 work package -> branch train -> reviewable PR slice -> verifier gates
 ```
 
-Use `large_pr`, `milestone_pr`, and `integration_pr` for real compiler work. A coherent compiler PR may touch production code, fixtures, corpus runners, expected outputs, and oracle infrastructure together when they prove one semantic invariant.
+A coherent compiler PR may touch production code, fixtures, corpus runners, expected outputs, and oracle infrastructure together when they prove one semantic invariant. Issues should reflect that scope: each component issue captures the change, the approach, the testing, and the related issues without inventing scope-class enums or LOC budgets.
 
 Branch trains:
 
@@ -563,7 +535,7 @@ The planner should keep issues current as memory. Closed issues should explain w
 
 ## Phase Model
 
-The planner should keep this order unless a blocker requires preparatory work.
+The phases below describe the engineering shape of the project, not the issue list. They are sequenced by what unblocks what. The component issues a planner generates can map across phases when one PR proves an invariant that spans phases. The planner should keep this order unless a blocker requires preparatory work.
 
 ### Phase 0: Reality Freeze And Measurement
 
