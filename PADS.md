@@ -3,7 +3,7 @@ pads_version: 2
 preset: compiler
 spec_status: active
 last_revised: "2026-05-06"
-revision_trigger: planner_quality_reset
+revision_trigger: reset
 
 tier0:
   project:
