@@ -440,6 +440,11 @@ anti_rabbit_hole:
     max_retries_per_symptom: 3
 
 starter_tasks:
+  # Calibration examples, not the backlog. The planner must synthesize the
+  # actual run plan from PADS.md, AGENTS.md, repo state, upstream references,
+  # current CI/corpus evidence, and worker handoffs. These examples show the
+  # intended scale and proof standard for early slices; they must not become
+  # the only work or suppress generative planning.
   - title: Build the compatibility matrix and current baseline ledger
     description: >
       Snapshot Solar against the declared compatibility surfaces, current fork
@@ -548,11 +553,12 @@ The first no-mission kickoff should not wait for a human to enumerate work. The 
 3. Refresh `campaign_state` in memory/wiki/tracking artifacts before dispatching code work: fork head, upstream head, open fork PRs, unsafe dependency updates, failing checks, and corpus counts.
 4. Plan the work the way a staff engineer would. Read the repo, this charter, the reference compiler, and the needs of downstream toolchains, then write a real engineering plan: substantial components-of-work that move Solar toward the completion contract.
 5. Create one master GitHub issue for the Solar completion campaign, then open one linked issue per substantial component. The master issue should explain the full path to completion, the current baseline, the north-star components, the proof boundary policy, and how the linked component issues fit together. The component issues should describe what changes, the engineering approach, the testing/checks that prove the change, and any related issues.
-6. Do not seed issues from this file's headings, tracks, oracles, or tiers. Do not generate "Investigate ..." or "What ...?" issues when the next engineering move is inferable. Do not anchor work to dates, durations, file counts, or line counts. Size work by the behavior and proof it needs.
-7. Start with the highest-leverage correctness and measurement work, not with isolated parity chores. Standard JSON I/O, project import semantics, structural diagnostics, artifact emission through Standard JSON, and the executable compiler spine are connected; group changes so a single PR proves an invariant a maintainer can review.
-8. Do not dispatch codegen, runtime, optimizer, or performance claims unless the work states the proof tier it can support and the missing dependencies.
-9. Preserve context after every completed or blocked worker: what changed, what failed, decisive evidence, next dependency, and the track it belongs to.
-10. Keep running until the orchestrator can explain that the original mission is complete or remaining work is low value.
+6. Use `starter_tasks` only as calibration examples for scale and proof standard. Do not treat them as a fixed backlog, and do not stop at them. Synthesize the real plan from repo evidence, upstream state, CI/corpus reality, prior worker handoffs, and the completion contract.
+7. Do not seed issues from this file's headings, tracks, oracles, or tiers. Do not generate "Investigate ..." or "What ...?" issues when the next engineering move is inferable. Do not anchor work to dates, durations, file counts, or line counts. Size work by the behavior and proof it needs.
+8. Start with the highest-leverage correctness and measurement work, not with isolated parity chores. Standard JSON I/O, project import semantics, structural diagnostics, artifact emission through Standard JSON, and the executable compiler spine are connected; group changes so a single PR proves an invariant a maintainer can review.
+9. Do not dispatch codegen, runtime, optimizer, or performance claims unless the work states the proof tier it can support and the missing dependencies.
+10. Preserve context after every completed or blocked worker: what changed, what failed, decisive evidence, next dependency, and the track it belongs to.
+11. Keep running until the orchestrator can explain that the original mission is complete or remaining work is low value.
 
 ## North Star
 
