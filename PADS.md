@@ -2,8 +2,8 @@
 pads_version: 2
 preset: compiler
 spec_status: active
-last_revised: "2026-05-06"
-revision_trigger: reset
+last_revised: "2026-05-07"
+revision_trigger: evidence
 
 tier0:
   project:
@@ -270,6 +270,20 @@ tracks:
     scope: ["research/**", "crates/**", "tools/**"]
     required_oracles: [research.artifact]
 
+priority_order:
+  - compatibility-matrix
+  - standard-json
+  - typeck-corpus
+  - foundry-hardhat
+  - runtime-equivalence
+  - mir-codegen
+  - parser-ast-diagnostics
+  - abi-natspec-sourcemaps
+  - yul-hir-boundary
+  - performance
+  - fuzz-metamorphic
+  - speculative-research
+
 north_star_components:
   - title: Standard JSON process contract
     outcome: solar --standard-json behaves like the compiler syscall real Solidity tools expect, including stdin/stdout shape, settings subset, output selection, and structurally compatible errors.
@@ -424,6 +438,65 @@ anti_rabbit_hole:
     max_wall_minutes_per_task: 480
     max_cost_usd_per_task: 100
     max_retries_per_symptom: 3
+
+starter_tasks:
+  - title: Build the compatibility matrix and current baseline ledger
+    description: >
+      Snapshot Solar against the declared compatibility surfaces, current fork
+      and upstream SHAs, solc 0.8.31, selected corpus commands, and known
+      unsupported features. Produce a durable matrix that future tasks can
+      update.
+    expected_output: Compatibility matrix artifact plus execution-ready tasks for the highest-value gaps.
+    track_id: compatibility-matrix
+    task_type: implementation
+    task_size: large_pr
+    reference_ids: ["paradigmxyz/solar#1"]
+    verification_hint: "cargo nextest run --workspace; cargo uitest; selected solc corpus command"
+  - title: Create the solc/Solar Standard JSON differential root
+    description: >
+      Build the smallest repeatable Standard JSON comparison harness for
+      errors, sources, contracts, ABI, method identifiers, storage layout, and
+      explicit unsupported fields.
+    expected_output: Reviewable harness PR with fixtures, normalized diff artifacts, and proof boundaries.
+    track_id: standard-json
+    task_type: implementation
+    task_size: milestone_pr
+    reference_ids: ["https://docs.soliditylang.org/en/latest/using-the-compiler.html"]
+    verification_hint: "solc --standard-json < input.json; solar --standard-json < input.json; diff normalized outputs"
+  - title: Enable a measurable solc TypeError corpus slice under -Ztypeck
+    description: >
+      Use upstream #615/#663/#737 as reference to expose one TypeError
+      category, record before/after eligible/pass/fail/skip counts, and port
+      the first reduced gaps into Solar-owned UI fixtures.
+    expected_output: Typeck corpus PR with counts, fixtures, and next gap tasks.
+    track_id: typeck-corpus
+    task_type: implementation
+    task_size: large_pr
+    reference_ids: ["paradigmxyz/solar#615", "paradigmxyz/solar#663", "paradigmxyz/solar#737"]
+    verification_hint: "cargo uitest; TESTER_MODE=solc-solidity cargo nextest run -p solar-compiler --test tests"
+  - title: Design and implement the bytecode/runtime equivalence MVP
+    description: >
+      Start from #687/#704 and build the minimum mixed solc/Solar loop that can
+      compile small contracts, normalize metadata, deploy both outputs, and
+      compare returns, reverts, logs, state, and gas.
+    expected_output: Runtime equivalence MVP with 5-10 fixtures or a precise blocker artifact.
+    track_id: runtime-equivalence
+    task_type: implementation
+    task_size: milestone_pr
+    reference_ids: ["paradigmxyz/solar#687", "paradigmxyz/solar#704", "paradigmxyz/solar#749"]
+    verification_hint: "revm/Anvil differential fixture command once implemented"
+  - title: Extract the MIR/codegen branch train
+    description: >
+      Treat feat/codegen-mir as a source branch. Produce branch trains for MIR
+      text/validator/pass manager, liveness, phi elimination, stack scheduling,
+      assembler, and HIR-to-MIR lowering.
+    expected_output: Dependency graph plus first importable PR slice with source commits and omitted work.
+    track_id: mir-codegen
+    task_type: research
+    task_size: milestone_pr
+    reference_ids: ["paradigmxyz/solar#693", "paradigmxyz/solar#749", "paradigmxyz/solar#687"]
+    reference_only: true
+    verification_hint: "git compare main...feat/codegen-mir; cite commit hashes"
 
 completion_contract:
   - "Solar supports the declared Solidity 0.8.x compatibility matrix or records every remaining gap with owner, oracle, corpus, and blocker."
