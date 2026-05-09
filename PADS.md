@@ -122,6 +122,22 @@ pr_queue_policy:
     - GitHub CI failures are classified as required, advisory, flaky, or baseline-noisy
     - known skipped or deferred checks are justified in the PR body
 
+artifact_hygiene:
+  readonly_globs:
+    - testdata/solidity/**
+    - Cargo.lock
+    - Cargo.toml
+    - crates/*/Cargo.toml
+    - .github/workflows/**
+    - rust-toolchain.toml
+    - deny.toml
+    - clippy.toml
+    - rustfmt.toml
+  snapshot_globs:
+    - tests/ui/**/*.stderr
+    - tests/ui/**/*.stdout
+  snapshot_suffixes: [".stderr", ".stdout", ".snap"]
+
 branch_policy:
   default_upstream_mode: reference_only
   write_target: fork_only
@@ -312,17 +328,17 @@ planning_guidance:
   - The track ladder, watchlist, and oracle definitions exist so generated work cannot overclaim. They do not define what to ship. The plan should reflect what a senior engineer would actually do to move Solar toward the completion contract; the policy here ensures the proof boundary stays honest.
 
 oracles:
-  - { id: cargo.fmt, kind: shell, tier: prerequisite, command: "cargo +nightly fmt --all --check" }
-  - { id: typos, kind: shell, tier: prerequisite, command: "typos --format brief" }
-  - { id: cargo.check, kind: shell, tier: prerequisite, command: "cargo check --workspace" }
-  - { id: cargo.build, kind: shell, tier: prerequisite, command: "cargo build --workspace" }
-  - { id: cargo.clippy, kind: shell, tier: gate, command: "cargo clippy --workspace --all-targets -- -D warnings" }
-  - { id: cargo.nextest, kind: shell, tier: gate, command: "cargo nextest run --workspace" }
-  - { id: cargo.doctest, kind: shell, tier: gate, command: "cargo test --doc --workspace" }
-  - { id: cargo.uitest, kind: shell, tier: gate, command: "cargo uitest" }
-  - { id: solc.syntax, kind: shell, tier: gate, command: "TESTER_MODE=solc-solidity cargo nextest run -p solar-compiler --test tests", corpus_ref: solc-syntax-tests }
-  - { id: solc.yul, kind: shell, tier: gate, command: "TESTER_MODE=solc-yul cargo nextest run -p solar-compiler --test tests", corpus_ref: solc-yul-tests }
-  - { id: solc.typeck, kind: shell, tier: gate, command: "TESTER_MODE=solc-solidity cargo nextest run -p solar-compiler --test tests", corpus_ref: solc-typeerror-tests }
+  - { id: cargo.fmt, kind: shell, tier: advisory, time_budget_s: 120, command: "cargo +nightly fmt --all --check" }
+  - { id: typos, kind: shell, tier: prerequisite, time_budget_s: 120, command: "typos --format brief" }
+  - { id: cargo.check, kind: shell, tier: prerequisite, time_budget_s: 900, command: "cargo check --workspace" }
+  - { id: cargo.build, kind: shell, tier: prerequisite, time_budget_s: 1200, command: "cargo build --workspace" }
+  - { id: cargo.clippy, kind: shell, tier: gate, time_budget_s: 1200, command: "cargo clippy --workspace --all-targets -- -D warnings" }
+  - { id: cargo.nextest, kind: shell, tier: gate, time_budget_s: 1800, command: "cargo nextest run --workspace" }
+  - { id: cargo.doctest, kind: shell, tier: gate, time_budget_s: 900, command: "cargo test --doc --workspace" }
+  - { id: cargo.uitest, kind: shell, tier: gate, time_budget_s: 1200, command: "cargo uitest" }
+  - { id: solc.syntax, kind: shell, tier: gate, time_budget_s: 1800, command: "TESTER_MODE=solc-solidity cargo nextest run -p solar-compiler --test tests", corpus_ref: solc-syntax-tests }
+  - { id: solc.yul, kind: shell, tier: gate, time_budget_s: 1800, command: "TESTER_MODE=solc-yul cargo nextest run -p solar-compiler --test tests", corpus_ref: solc-yul-tests }
+  - { id: solc.typeck, kind: shell, tier: gate, time_budget_s: 1800, command: "TESTER_MODE=solc-solidity cargo nextest run -p solar-compiler --test tests", corpus_ref: solc-typeerror-tests }
   - id: solc.standard_json.frontend
     kind: semantic_differential
     tier: gate
@@ -330,7 +346,7 @@ oracles:
     reference: { compiler: solc, interface: standard-json, version: "0.8.31" }
     under_test: { compiler: solar, interface: standard-json }
     compare: [errors, sources, contracts, abi, userdoc, devdoc, storageLayout, methodIdentifiers]
-  - { id: foundry.config, kind: shell, tier: advisory, command: "forge config --json && forge remappings" }
+  - { id: foundry.config, kind: shell, tier: advisory, time_budget_s: 120, command: "forge config --json && forge remappings" }
   - id: foundry.standard_json
     kind: semantic_differential
     tier: advisory
@@ -338,7 +354,7 @@ oracles:
     reference: { compiler: solc, interface: standard-json }
     under_test: { compiler: solar, interface: standard-json }
     compare: [errors, abi, metadata, storageLayout, build-info]
-  - { id: mir.roundtrip, kind: shell, tier: advisory, command: "cargo test -p solar-mir" }
+  - { id: mir.roundtrip, kind: shell, tier: advisory, time_budget_s: 900, command: "cargo test -p solar-mir" }
   - id: solc.bytecode
     kind: differential
     tier: advisory
@@ -356,9 +372,9 @@ oracles:
     tier: advisory
     corpus_ref: fuzz-minimized
     compare: [accept_reject, runtime_equivalence, diagnostic_category]
-  - { id: perf.codspeed, kind: shell, tier: advisory, command: "cargo codspeed build && cargo codspeed run" }
-  - { id: perf.iai, kind: shell, tier: advisory, command: "cargo bench -p solar-bench --bench iai" }
-  - { id: research.artifact, kind: shell, tier: advisory, command: "test -d research || true" }
+  - { id: perf.codspeed, kind: shell, tier: advisory, time_budget_s: 2400, command: "cargo codspeed build && cargo codspeed run" }
+  - { id: perf.iai, kind: shell, tier: advisory, time_budget_s: 1800, command: "cargo bench -p solar-bench --bench iai" }
+  - { id: research.artifact, kind: shell, tier: advisory, time_budget_s: 30, command: "test -d research || true" }
 
 corpora:
   - id: solar-native
@@ -455,6 +471,27 @@ starter_tasks:
     track_id: compatibility-matrix
     task_type: implementation
     task_size: large_pr
+    allowed_paths:
+      - crates/interface/src
+      - crates/solar/src
+      - tools
+      - tests/ui
+      - scripts/pads
+    path_hints:
+      - path: crates/interface
+        what_to_look_for: "Compiler session/options/output surfaces that already model solc-facing behavior."
+      - path: crates/solar
+        what_to_look_for: "CLI and driver wiring for current compiler entrypoints."
+      - path: tools/tester
+        what_to_look_for: "Existing corpus runner conventions and solc comparison hooks."
+    oracle_commands:
+      - cargo check --workspace
+      - cargo nextest run --workspace
+      - cargo uitest
+    acceptance_criteria:
+      - "Repository-owned compatibility ledger names each declared surface, current support state, strongest passing oracle, and next owner track."
+      - "The PR records exact fork/upstream SHAs and tool versions from `.pads/setup.sh` output."
+      - "Every unsupported or unknown surface links to a follow-up task with an oracle or explicit blocker."
     reference_ids: ["paradigmxyz/solar#1"]
     verification_hint: "cargo nextest run --workspace; cargo uitest; selected solc corpus command"
   - title: Create the solc/Solar Standard JSON differential root
@@ -466,6 +503,26 @@ starter_tasks:
     track_id: standard-json
     task_type: implementation
     task_size: milestone_pr
+    allowed_paths:
+      - crates/interface/src
+      - crates/solar/src
+      - tests/standard-json
+      - tools
+    path_hints:
+      - path: crates/interface
+        what_to_look_for: "Input/output types and diagnostics serialization used by compiler consumers."
+      - path: crates/solar
+        what_to_look_for: "CLI stdin/stdout and command-line mode handling."
+      - path: tests/ui
+        what_to_look_for: "Existing fixture style if standard-json smoke tests need UI-adjacent coverage."
+    oracle_commands:
+      - cargo check --workspace
+      - cargo nextest run --workspace
+      - cargo run -- --standard-json < tests/standard-json/smoke/minimal.json
+    acceptance_criteria:
+      - "A repo-owned Standard JSON smoke fixture can be run through Solar without file path CLI requirements."
+      - "The harness captures normalized output fields for errors, sources, contracts, ABI, and explicitly unsupported fields."
+      - "The PR compares Solar output against pinned solc 0.8.31 for at least one two-source input."
     reference_ids: ["https://docs.soliditylang.org/en/latest/using-the-compiler.html"]
     verification_hint: "solc --standard-json < input.json; solar --standard-json < input.json; diff normalized outputs"
   - title: Enable a measurable solc TypeError corpus slice under -Ztypeck
@@ -477,6 +534,24 @@ starter_tasks:
     track_id: typeck-corpus
     task_type: implementation
     task_size: large_pr
+    allowed_paths:
+      - crates/sema/src
+      - crates/solar/src
+      - tools/tester
+      - tests/ui/typeck
+    path_hints:
+      - path: crates/sema
+        what_to_look_for: "Typechecker owner modules, diagnostic emission, and TypeError-style mismatch handling."
+      - path: tools/tester
+        what_to_look_for: "Mode selection and corpus filtering for solc syntax/typeck tests."
+    oracle_commands:
+      - cargo check --workspace
+      - cargo uitest
+      - TESTER_MODE=solc-solidity cargo nextest run -p solar-compiler --test tests
+    acceptance_criteria:
+      - "The PR exposes one measurable TypeError corpus lane with before/after eligible/pass/fail/skip counts."
+      - "At least one reduced UI fixture is added for a real mismatch category."
+      - "Any xfail/skip has owner track, reason, first-seen source, and revisit condition."
     reference_ids: ["paradigmxyz/solar#615", "paradigmxyz/solar#663", "paradigmxyz/solar#737"]
     verification_hint: "cargo uitest; TESTER_MODE=solc-solidity cargo nextest run -p solar-compiler --test tests"
   - title: Design and implement the bytecode/runtime equivalence MVP
@@ -488,6 +563,25 @@ starter_tasks:
     track_id: runtime-equivalence
     task_type: implementation
     task_size: milestone_pr
+    allowed_paths:
+      - crates/interface/src
+      - crates/solar/src
+      - crates/sema/src
+      - tests/runtime
+    path_hints:
+      - path: crates/interface
+        what_to_look_for: "Artifact emission boundary before bytecode comparison."
+      - path: crates/codegen
+        what_to_look_for: "Only edit if current branch already has codegen owner files; otherwise produce a blocker artifact."
+      - path: tools
+        what_to_look_for: "Existing tester/harness shape for invoking compiled artifacts."
+    oracle_commands:
+      - cargo check --workspace
+      - cargo nextest run --workspace
+    acceptance_criteria:
+      - "The PR creates an executable runtime-equivalence MVP or a precise blocker artifact naming the missing compiler stage."
+      - "Fixtures cover deploy/call/revert/log/storage expectations for 5-10 reduced contracts if executable output exists."
+      - "Bytecode/runtime claims are explicitly limited to covered cases and normalized metadata rules."
     reference_ids: ["paradigmxyz/solar#687", "paradigmxyz/solar#704", "paradigmxyz/solar#749"]
     verification_hint: "revm/Anvil differential fixture command once implemented"
   - title: Extract the MIR/codegen branch train
@@ -499,6 +593,23 @@ starter_tasks:
     track_id: mir-codegen
     task_type: research
     task_size: milestone_pr
+    allowed_paths:
+      - crates/interface/src
+      - crates/solar/src
+      - crates/sema/src
+      - tests/ui
+    path_hints:
+      - path: crates
+        what_to_look_for: "Current fork modules that correspond to MIR/codegen branch train concepts."
+      - path: tools
+        what_to_look_for: "Existing tester or artifact hooks that could prove each train slice."
+    oracle_commands:
+      - git diff --stat main...feat/codegen-mir
+      - cargo check --workspace
+    acceptance_criteria:
+      - "The output names a dependency graph of importable branch slices with source commits and omitted work."
+      - "The first implementation-ready slice has file-level writable paths, verifier command, and no wholesale branch merge."
+      - "Every branch-train claim cites upstream PR/commit evidence."
     reference_ids: ["paradigmxyz/solar#693", "paradigmxyz/solar#749", "paradigmxyz/solar#687"]
     reference_only: true
     verification_hint: "git compare main...feat/codegen-mir; cite commit hashes"
