@@ -3,7 +3,7 @@ pads_version: 2
 preset: compiler
 spec_status: active
 last_revised: "2026-05-10"
-revision_trigger: organizer_completion_brief
+revision_trigger: external
 
 tier0:
   project:
