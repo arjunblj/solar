@@ -7,9 +7,16 @@ export PATH="$CARGO_HOME/bin:$HOME/.cargo/bin:$HOME/.foundry/bin:$HOME/.solc-sel
 
 git submodule update --init --checkout testdata/solidity
 
-rustup toolchain install 1.88.0 nightly --profile minimal
-rustup component add clippy rustfmt --toolchain 1.88.0
-rustup component add clippy rustfmt --toolchain nightly
+# Solar's rustfmt.toml uses unstable rustfmt features (imports_granularity,
+# wrap_comments, format_macro_matchers, …) so `cargo fmt` MUST run under
+# nightly. Install nightly rustfmt + clippy together and verify both work
+# before declaring setup successful — silent fallback to stable rustfmt
+# produces 100+ "unstable features are only available in nightly channel"
+# warnings and exits 1, breaking every fmt verifier in the harness.
+rustup toolchain install 1.88.0 --profile minimal --component clippy --component rustfmt
+rustup toolchain install nightly --profile minimal --component clippy --component rustfmt
+cargo +1.88.0 fmt --version >/dev/null
+cargo +nightly fmt --version >/dev/null
 
 if ! command -v cargo-nextest >/dev/null 2>&1; then
   cargo install --locked cargo-nextest
