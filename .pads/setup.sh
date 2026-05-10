@@ -26,10 +26,13 @@ if ! command -v typos >/dev/null 2>&1; then
 fi
 
 # Advisory tools: useful for docs/perf/feature-matrix work, but not required
-# for a basic kickoff. Missing installs are reported by the version summary.
-cargo install --locked cargo-docs-rs || true
-cargo install --locked cargo-hack || true
-cargo install cargo-codspeed || true
+# for a basic kickoff. Opt in when the run needs docs/perf/feature-matrix work;
+# missing advisory tools are reported by the version summary below.
+if [[ "${PADS_INSTALL_ADVISORY_TOOLS:-0}" == "1" ]]; then
+  cargo install --locked cargo-docs-rs || true
+  cargo install --locked cargo-hack || true
+  cargo install cargo-codspeed || true
+fi
 
 if ! command -v forge >/dev/null 2>&1; then
   curl -L https://foundry.paradigm.xyz | bash
@@ -43,7 +46,14 @@ if command -v solc-select >/dev/null 2>&1; then
   solc-select install 0.8.31 || true
   solc-select use 0.8.31 || true
 fi
-export SOLC="${SOLC:-$(command -v solc)}"
+if [[ -z "${SOLC:-}" ]]; then
+  if command -v solc >/dev/null 2>&1; then
+    export SOLC="$(command -v solc)"
+  else
+    export SOLC=""
+    echo "[pads/setup] warning: solc 0.8.31 not found; solc differential oracles are unavailable until SOLC is set" >&2
+  fi
+fi
 
 python3 -m pip install --user -r scripts/pads/requirements.txt
 python3 scripts/pads/spec-sync.py
@@ -57,7 +67,9 @@ cargo --version
 cargo nextest --version
 typos --version
 forge --version
-"$SOLC" --version
+if [[ -n "${SOLC:-}" ]]; then
+  "$SOLC" --version
+fi
 jq --version || true
 uv --version || true
 node --version || true

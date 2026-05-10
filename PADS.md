@@ -2,8 +2,8 @@
 pads_version: 2
 preset: compiler
 spec_status: active
-last_revised: "2026-05-07"
-revision_trigger: evidence
+last_revised: "2026-05-10"
+revision_trigger: organizer_completion_brief
 
 tier0:
   project:
@@ -72,16 +72,22 @@ tier0:
     - This file is policy, context, and a senior-engineer briefing. It is not a backlog template. Generated GitHub issues should be substantial components of work that yield meaningful PRs, not a mechanical decomposition of this file's headings, tracks, oracles, or tier numbers.
 
 campaign_state:
-  epoch: "2026-05-05"
-  fork_main_commit: "01491176b7f94ad564df8592bb36b51448d4a047"
+  epoch: "2026-05-10"
+  fork_main_commit: "bfb7c2cd16b1831b4b1b86c122cfd66184bccc64"
   upstream_main_commit: "d79be54cb8ffb398b8185d1c3c12b387c745835c"
+  upstream_codegen_mir_commit: "69d2521c02d5d4ca63c8ba2598b2d67bdf099280"
+  upstream_runtime_equivalence_pr: "paradigmxyz/solar#760"
+  organizer_completion_brief: "2026-05-10 Solar completion context distilled from upstream/repo study"
   refresh_before_dispatch: true
   refresh_items:
     - fork compare against upstream main
     - fork open PRs and unsafe dependency updates
     - upstream issue and PR watchlist state
+    - upstream branch state, especially feat/codegen-mir and active typeck branches
+    - gakonst codegen roadmap and runtime-equivalence comments
     - latest CI status and required versus advisory failures
     - corpus counts and skip/xfail deltas
+    - whether generated plan/issues/prompts use the organizer completion brief to produce repo-grounded work
 
 sandbox_profile:
   required_bins: [cargo, rustc, cargo-nextest, typos, solc, solc-select, forge, jq, python3, uv]
@@ -176,8 +182,15 @@ branch_policy:
       upstream_ref: pull/693/head
       mode: extract
       priority: critical
-      related: ["paradigmxyz/solar#693", "paradigmxyz/solar#749", "paradigmxyz/solar#756"]
-      notes: "Open draft with broad codegen work; use as source material, never blind merge."
+      related: ["paradigmxyz/solar#693", "paradigmxyz/solar#749", "paradigmxyz/solar#756", "paradigmxyz/solar#760"]
+      notes: "Open draft with broad codegen work; use as source material, never blind merge. Current branch tip observed 2026-05-10: 69d2521."
+    - id: codegen-runtime-equivalence
+      source: paradigmxyz/solar
+      upstream_ref: pull/760/head
+      mode: extract
+      priority: critical
+      related: ["paradigmxyz/solar#760", "paradigmxyz/solar#704", "paradigmxyz/solar#693"]
+      notes: "Solar-vs-solc codegen CI is currently red on runtime mismatches. Mine the comparator/reporting shape as red/xfail infrastructure; do not claim codegen correctness from it."
     - id: yul-hir
       source: paradigmxyz/solar
       upstream_ref: issues/415
@@ -197,8 +210,8 @@ branch_policy:
       upstream_ref: open-prs
       mode: cherry_pick
       priority: high
-      related: ["paradigmxyz/solar#743", "paradigmxyz/solar#744", "paradigmxyz/solar#755", "paradigmxyz/solar#758"]
-      notes: "Narrow parser/diagnostic/sema fixes; verify freshness and tests before importing."
+      related: ["paradigmxyz/solar#743", "paradigmxyz/solar#744", "paradigmxyz/solar#755", "paradigmxyz/solar#758", "paradigmxyz/solar#761"]
+      notes: "Narrow parser/diagnostic/sema fixes; verify freshness and tests before importing. PR #761 is a high-value first candidate because it is a small sema fix with green upstream CI."
     - id: divergence-caution
       source: paradigmxyz/solar
       upstream_ref: issues/547
@@ -319,6 +332,9 @@ north_star_components:
     outcome: Solar gets faster only on surfaces whose correctness oracle already passes, with paired same-environment baselines, profiles, and before/after evidence.
 
 planning_guidance:
+  - Treat PADS.md and AGENTS.md as organizer-supplied kickoff context that the autonomous harness should ingest and rely on when planning. For implementation claims, PR bodies, and completion claims, pair that context with concrete repo code, upstream issue/PR/branch evidence, oracle output, or diffs.
+  - The operator is not manually finishing Solar. The product goal is that the Pads harness can ingest this file plus the repo and then autonomously behave like a senior compiler team over weeks, discovering, planning, implementing, verifying, reviewing, publishing, learning from upstream, and replenishing work without a hand-written mission.
+  - The upstream vision is the starting map, especially gakonst's codegen/MIR roadmap and runtime-equivalence comments. The autonomous campaign should first reach baseline correctness and observability, then surpass upstream performance and research quality on this fork with explicit oracles.
   - The initial generated GitHub issue list should be substantial components-of-work, each one a meaningful PR a senior engineer would land. The master issue should explain how those components fit together end-to-end, link them, and describe what shipped looks like. The master issue is not itself a PR.
   - Every issue should describe what the change is, the engineering approach, how to know it is done (testing/checks), and any related issues. Do not include time estimates, deadlines, line-of-code budgets, file-count targets, or scope-class enums in the issue body. Size work by the behavior it produces and the proof it requires.
   - Do not generate research-question issues ("What is...?", "Which...?", "Investigate...") when a senior engineer can infer the next engineering move from this charter, the repository, the reference compiler, and the needs of downstream toolchains. If a real decision is genuinely blocking, capture it as planner research, not as a public issue.
@@ -326,6 +342,8 @@ planning_guidance:
   - Do not parrot this file's track names or oracle ladder tier numbers into the issue list. Tracks and oracles are project policy and verification grammar. Issues are concrete components of compiler work.
   - Durable repository tooling should fit the repository's native engineering system. Solar is a Rust compiler; default to Rust-native tooling or existing Rust test/harness surfaces for project-owned durable tools. Python or shell is fine for tiny glue only when it follows an existing convention or avoids committing generated/cache artifacts. If native tooling requires locked manifest edits, surface the approval blocker rather than silently switching languages.
   - The track ladder, watchlist, and oracle definitions exist so generated work cannot overclaim. They do not define what to ship. The plan should reflect what a senior engineer would actually do to move Solar toward the completion contract; the policy here ensures the proof boundary stays honest.
+  - Penalize generated plans, issues, and worker prompts if they equate draft codegen with compiler completion, ignore pinned solc 0.8.31, count ignored exits as passes, skip Standard JSON or Yul, optimize before correctness oracles, import generated Foundry caches, or use broad parity language without exact corpus/version/settings/field evidence.
+  - A high-quality kickoff plan starts with measurement and correctness, then branch-mines upstream into a dependency-ordered branch train. It should not parrot this file's phase names or create research-question issues when the next engineering move is inferable.
 
 oracles:
   - { id: cargo.fmt, kind: shell, tier: advisory, time_budget_s: 120, command: "cargo +nightly fmt --all --check" }
@@ -514,13 +532,17 @@ The first no-mission kickoff should not wait for a human to enumerate work. The 
 2. Read this `PADS.md`, `AGENTS.md`, `.pads/spec.json`, the fork diff, upstream issue/PR watchlist, and current CI status.
 3. Refresh `campaign_state` in memory/wiki/tracking artifacts before dispatching code work: fork head, upstream head, open fork PRs, unsafe dependency updates, failing checks, and corpus counts.
 4. Plan the work the way a staff engineer would. Read the repo, this charter, the reference compiler, and the needs of downstream toolchains, then write a real engineering plan: substantial components-of-work that move Solar toward the completion contract.
-5. Create one master GitHub issue for the Solar completion campaign, then open one linked issue per substantial component. The master issue should explain the full path to completion, the current baseline, the north-star components, the proof boundary policy, and how the linked component issues fit together. The component issues should describe what changes, the engineering approach, the testing/checks that prove the change, and any related issues.
-6. Use `starter_tasks` only as calibration examples for scale and proof standard. Do not treat them as a fixed backlog, and do not stop at them. Synthesize the real plan from repo evidence, upstream state, CI/corpus reality, prior worker handoffs, and the completion contract.
+5. Project issues are memory, not the work itself. Create the smallest useful public issue surface for the current plan: usually one campaign control issue plus linked component issues once the branch train and proof boundary are clear. Do not block implementation on perfect issue hierarchy, and do not create phase-heading issues when a worker can already start a reviewable compiler slice.
+6. Do not look for `starter_tasks`; they were intentionally removed. Synthesize the real plan from repo evidence, upstream state, CI/corpus reality, prior worker handoffs, and the completion contract.
 7. Do not seed issues from this file's headings, tracks, oracles, or tiers. Do not generate "Investigate ..." or "What ...?" issues when the next engineering move is inferable. Do not anchor work to dates, durations, file counts, or line counts. Size work by the behavior and proof it needs.
 8. Start with the highest-leverage correctness and measurement work, not with isolated parity chores. Standard JSON I/O, project import semantics, structural diagnostics, artifact emission through Standard JSON, and the executable compiler spine are connected; group changes so a single PR proves an invariant a maintainer can review.
 9. Do not dispatch codegen, runtime, optimizer, or performance claims unless the work states the proof tier it can support and the missing dependencies.
 10. Preserve context after every completed or blocked worker: what changed, what failed, decisive evidence, next dependency, and the track it belongs to.
 11. Keep running until the orchestrator can explain that the original mission is complete or remaining work is low value.
+
+Run-state policy:
+
+Use clean resets only while validating fresh ingestion, schema compatibility, or bootstrap behavior. Once a run has a coherent plan, useful frontier state, worker evidence, open draft PRs, or unresolved but valuable blockers, prefer resume, repair, replan, or targeted cleanup over full reset. The product goal is cumulative long-running autonomy, not discarding useful team memory after every harness improvement.
 
 ## North Star
 
@@ -565,15 +587,49 @@ Branch trains:
 - Corpus train: fixture generator, bug-pattern corpus, reduced failing cases, xfail pruning.
 - Advisory train: performance, LSP, docs, and speculative research when they do not block correctness.
 
-Issue hierarchy:
+Issue projection policy:
 
-- Master issue: one long-lived campaign control plane titled `Solar autonomous completion campaign`.
-- Phase issues: one per phase below, each linked from the master issue.
-- Work package issues: large, durable slices such as `Standard JSON frontend parity root`, `Typeck TypeError corpus lane`, `Runtime equivalence MVP`, or `MIR liveness train`.
-- PR slice issues: concrete implementation/reviewable PR units linked to the relevant work package.
-- Follow-up issues: automatically spawned from blocked handoffs, review comments, CI failures, corpus deltas, or upstream movement.
+- Issues are control-plane memory for coordination, not proof of progress.
+- Prefer the fewest issues that preserve ownership, dependency order, and reviewability. A campaign control issue is useful when it links the current branch train, baseline, proof boundaries, and open PRs; it is not mandatory before the first worker edits.
+- Component issues should be generated from the actual plan and current repo/upstream state, not from this file's phase headings. Good issues name a reviewable compiler invariant, the branch/source material if any, the proof tier, and the next dependency.
+- Follow-up issues should come from blocked handoffs, review comments, CI failures, corpus deltas, upstream movement, or completed PR evidence.
 
-The planner should keep issues current as memory. Closed issues should explain what was proven, what remains, and which next issue owns the dependency.
+The planner should keep issues current as memory. Closed issues should explain what was proven, what remains, and which next issue owns the dependency. If generated issues are vague, phase-shaped, or disconnected from code work, skip issue projection and dispatch a better localized task instead.
+
+## Organizer Completion Brief
+
+This brief distills an independent upstream/repo study into the project context the autonomous harness should ingest. The harness is not expected to ignore PADS.md; PADS.md and AGENTS.md are the organizer-authored setup files that tell the harness what a strong Solar campaign should understand before it plans, opens issues, dispatches workers, or judges completion.
+
+As of the 2026-05-10 refresh, Solar `main` is best understood as a fast Rust Solidity frontend with lexer/parser, AST, diagnostics, file resolution, HIR lowering, symbol resolution, ABI emission, and opt-in type checking behind `-Ztypeck`. It does not have production-ready middle-end/backend codegen on `main`. Codegen exists as active upstream source material on `feat/codegen-mir` and PR `#693`, with PR `#760` exposing real Solar-vs-solc runtime mismatches.
+
+The completion path is:
+
+1. Freeze objective oracles: pinned `solc 0.8.31`, UI tests, solc syntax/type-error corpus, project corpus, Foundry runtime equivalence, and benchmark harnesses.
+2. Finish frontend/typechecker measurement and targeted semantic fixes.
+3. Make Standard JSON and project replay the integration front door.
+4. Resolve the Yul/inline-assembly boundary enough for real projects.
+5. Extract MIR/codegen from upstream as a dependency-ordered branch train, never as a wholesale merge.
+6. Build bytecode/runtime equivalence infrastructure early, even if it starts red/xfail.
+7. Optimize only after the corresponding correctness surface is measurable.
+8. Use speculative compiler research only behind flags, isolated paths, fixtures, or advisory oracles.
+
+Reference branch-train candidates to consider after refresh (examples, not starter tasks):
+
+Refresh upstream refs, fork diffs, open PRs, conflicts, and current CI before selecting from this list. These candidates are context for senior planning, not a backlog to copy verbatim.
+
+- Replicate or cherry-pick `#761` bare integer alias canonicalization with UI test and full CI.
+- Strengthen `#737` into a real `-Ztypeck` solc-corpus lane that counts TypeError tests, records xfails, and never calls ignored exits passing.
+- Build a typeck parity report for `#615`: pass/fail/ICE/unsupported by category against pinned `solc`.
+- Mine active `feat/typeck-*` branches for narrow semantic fixes with solc-linked fixtures.
+- Add a real solc-divergence ledger for `#547` with rationale, fixture, and revisit condition.
+- Decide the Yul/HIR semantics that make `#415` actionable before mining `#652`.
+- Split `#754` into benchmark-harness correctness first, then parser/source-map performance patches with correctness gates.
+- Extract minimal Standard JSON input/project replay before any runtime claim.
+- Extract MIR core from `#693`: data model, text parser/printer, validator, pass manager, and `solar-mir-opt`.
+- Extract liveness and phi elimination with MIR golden tests.
+- Extract `#760`-style runtime equivalence as red/xfail infrastructure that reports exact mismatches.
+
+Generated plans should be judged against this organizer brief. A plan that produces many issues but misses Standard JSON, Yul, typeck corpus measurement, runtime equivalence, or upstream branch mining is low quality even if every issue is well formatted.
 
 ## Phase Model
 
@@ -813,6 +869,9 @@ Passing a lower tier only proves that tier. Do not overclaim.
 
 Every PR must state strongest passing tier, exact commands, corpus deltas, skipped/deferred checks, and proof boundary.
 
+A PR or patch candidate is not ready for publication if it covers only a minority of its acceptance criteria without naming a concrete external blocker, verifier limitation, or dependency handoff. Partial progress is useful as worker evidence, but the PR bar is a reviewable invariant with honest proof boundaries.
+
+
 ## Foundry And Hardhat Integration
 
 Foundry support is more than running `solar $(forge remappings) file.sol`.
@@ -892,6 +951,8 @@ Use these as reference evidence, then verify local applicability before editing:
 - `#694-#704`: liveness, phi elimination, stack scheduling, spilling, assembler, complex lowering, optimizers, equivalence harness.
 - `#693`: broad codegen draft branch, extract-only.
 - `#749`: MIR pass manager/text/validator work merged into `feat/codegen-mir`.
+- `#760`: Solar-vs-solc runtime comparison on the codegen branch; currently red and useful as mismatch-reporting infrastructure.
+- `#761`: narrow sema fix for bare `uint`/`int` aliases with green upstream CI; good first cherry-pick/import candidate.
 - `#415/#652`: Yul/HIR boundary and design caution.
 - `#754/#508/#475`: performance harness and frontend perf.
 - `#743/#744/#755/#758`: narrow current upstream fixes.
@@ -907,6 +968,7 @@ Good slices:
 - A Standard JSON field gets supported or explicitly rejected with correct diagnostics.
 - A Foundry project/input becomes replayable.
 - A MIR/codegen dependency lands with fixtures but no overclaimed runtime behavior.
+- A red runtime-equivalence comparator becomes a truthful xfail/mismatch report with exact unsupported cases.
 - A performance PR changes one hot path and reports correctness plus benchmark evidence.
 
 Bad slices:
@@ -918,6 +980,8 @@ Bad slices:
 - performance work without correctness gates
 - codegen/runtime claims without T7/T8 evidence
 - generic cleanup not tied to a compiler oracle or active blocker
+- plans, issues, or PRs that treat PADS headings as a backlog instead of using PADS/MD as organizer context for repo-grounded work
+- generated issues that restate phase headings instead of proposing reviewable compiler work
 
 ## PR Quality Bar
 
@@ -925,6 +989,7 @@ Every PR must include:
 
 - Scope and changed files.
 - Linked upstream issue, PR, branch, or source commit when relevant.
+- For upstream-mined work: exact source branch/commit/PR, omitted changes, and why the slice is safe independently.
 - What behavior changed.
 - Why this slice is the current useful dependency.
 - Exact commands and outputs.
