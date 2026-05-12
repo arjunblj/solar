@@ -3,7 +3,7 @@ pads_version: 2
 preset: compiler
 spec_status: active
 last_revised: "2026-05-12"
-revision_trigger: autonomous_audit
+revision_trigger: evidence
 
 tier0:
   project:
