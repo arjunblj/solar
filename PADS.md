@@ -2,8 +2,8 @@
 pads_version: 2
 preset: compiler
 spec_status: active
-last_revised: "2026-05-10"
-revision_trigger: external
+last_revised: "2026-05-12"
+revision_trigger: autonomous_audit
 
 tier0:
   project:
@@ -72,12 +72,12 @@ tier0:
     - This file is policy, context, and a senior-engineer briefing. It is not a backlog template. Generated GitHub issues should be substantial components of work that yield meaningful PRs, not a mechanical decomposition of this file's headings, tracks, oracles, or tier numbers.
 
 campaign_state:
-  epoch: "2026-05-10"
-  fork_main_commit: "bfb7c2cd16b1831b4b1b86c122cfd66184bccc64"
+  epoch: "2026-05-12"
+  fork_main_commit: "23b71bcaff6d58cdc3a8e6516bddbbd2896c4340"
   upstream_main_commit: "d79be54cb8ffb398b8185d1c3c12b387c745835c"
   upstream_codegen_mir_commit: "69d2521c02d5d4ca63c8ba2598b2d67bdf099280"
   upstream_runtime_equivalence_pr: "paradigmxyz/solar#760"
-  organizer_completion_brief: "2026-05-10 Solar completion context distilled from upstream/repo study"
+  organizer_completion_brief: "2026-05-12 Solar completion context distilled from fresh local repo and upstream audit"
   refresh_before_dispatch: true
   refresh_items:
     - fork compare against upstream main
@@ -600,7 +600,9 @@ The planner should keep issues current as memory. Closed issues should explain w
 
 This brief distills an independent upstream/repo study into the project context the autonomous harness should ingest. The harness is not expected to ignore PADS.md; PADS.md and AGENTS.md are the organizer-authored setup files that tell the harness what a strong Solar campaign should understand before it plans, opens issues, dispatches workers, or judges completion.
 
-As of the 2026-05-10 refresh, Solar `main` is best understood as a fast Rust Solidity frontend with lexer/parser, AST, diagnostics, file resolution, HIR lowering, symbol resolution, ABI emission, and opt-in type checking behind `-Ztypeck`. It does not have production-ready middle-end/backend codegen on `main`. Codegen exists as active upstream source material on `feat/codegen-mir` and PR `#693`, with PR `#760` exposing real Solar-vs-solc runtime mismatches.
+As of the 2026-05-12 refresh, local fork `main` is `23b71bcaff6d58cdc3a8e6516bddbbd2896c4340`; upstream `main` is `d79be54cb8ffb398b8185d1c3c12b387c745835c`; upstream `feat/codegen-mir` is `69d2521c02d5d4ca63c8ba2598b2d67bdf099280`. Solar `main` is best understood as a fast Rust Solidity frontend with lexer/parser, AST, diagnostics, file resolution, HIR lowering, symbol resolution, ABI/hash emission, and opt-in type checking behind `-Ztypeck`. It does not have production-ready middle-end/backend codegen on `main`. Codegen exists as active upstream source material on `feat/codegen-mir` and PR `#693`, with PR `#760` exposing real Solar-vs-solc runtime mismatches.
+
+Cheap current corpus facts from the May 12 audit: `tests/ui` has about 194 `.sol` fixtures; typeck UI has about 75 `.sol` fixtures; the solc syntax corpus has about 3,499 `.sol` files; `TypeError` annotations appear in about 1,542 syntax-test files; libyul has about 1,204 `.yul`/`.sol` test files. Treat these as refreshable audit facts, not permanent truth.
 
 The completion path is:
 
@@ -629,6 +631,21 @@ Refresh upstream refs, fork diffs, open PRs, conflicts, and current CI before se
 - Extract liveness and phi elimination with MIR golden tests.
 - Extract `#760`-style runtime equivalence as red/xfail infrastructure that reports exact mismatches.
 
+First campaign slices a strong planner should consider after refreshing repo/upstream/CI state:
+
+1. Add a repo-native oracle inventory report for tool versions, corpus counts, hardcoded skip counts, and local CI gate classification. This is measurement-only and should emit deterministic JSON.
+2. Split the solc tester into explicit syntax, Yul, and TypeError/typeck lanes with skip reason counters and no "ignored exit == pass" ambiguity.
+3. Import a narrow upstream semantic fix such as `#761` only with source attribution, local fixture, and focused typeck/UI evidence.
+4. Implement the minimal Standard JSON front door: stdin parse, `language`, `sources`, `settings.stopAfter`, and honest unsupported-field diagnostics.
+5. Add Standard JSON diagnostics parity for `errors[]` shape, source locations, severity, code, and formatted message on small invalid-source fixtures.
+6. Emit frontend Standard JSON outputs for ABI and method identifiers through existing ABI/hash logic before bytecode claims exist.
+7. Prove source identity and import replay for base/include/remapping/allow-path behavior with multi-file fixtures.
+8. Add a TypeError corpus measurement PR with xfail manifest schema, reason taxonomy, before/after counters, and the first reduced mismatch fixture.
+9. Emit simple NatSpec `userdoc`/`devdoc` through Standard JSON.
+10. Make Yul corpus skip/xfail accounting explicit and report unsupported lowering truthfully.
+11. Extract MIR root infrastructure only: data model, text parser/printer, validator, and pass manager.
+12. Extract runtime-equivalence skeleton as red/xfail infrastructure with bytecode normalization and mismatch artifact format.
+
 Generated plans should be judged against this organizer brief. A plan that produces many issues but misses Standard JSON, Yul, typeck corpus measurement, runtime equivalence, or upstream branch mining is low quality even if every issue is well formatted.
 
 ## Phase Model
@@ -653,6 +670,9 @@ Work packages:
 - Current-state refresh artifact: fork/upstream/CI/corpus/watchlist snapshot.
 - Baseline oracle audit: which commands work locally, which are missing tools, which are too expensive for every PR, and which are advisory.
 - Compatibility matrix scaffold: rows for parser, AST, diagnostics, typeck, Standard JSON, ABI, NatSpec, source maps, metadata, bytecode, runtime, Foundry/Hardhat, performance, fuzz.
+- Machine-readable xfail/skip ledger schema: reason, issue/track, first-seen commit, corpus source, oracle id, owner track, and revisit condition.
+- Standard JSON subset contract: the first supported fields, normalized diff schema, unsupported-field diagnostic shape, and pinned `solc` binary provenance.
+- Upstream import provenance schema: source PR/branch/commit, imported commits, omitted commits, local conflicts, attribution, proof tier, and reason the slice is independently safe.
 - Unsafe-work queue: dependency update PRs, MSRV hazards, broad codegen branches, workflow edits, snapshot-only changes, stale LSP branches.
 
 Oracles:
