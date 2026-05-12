@@ -355,52 +355,52 @@ oracles:
   - { id: solc.syntax, kind: shell, tier: gate, time_budget_s: 1800, command: "TESTER_MODE=solc-solidity cargo nextest run -p solar-compiler --test tests", corpus_ref: solc-syntax-tests }
   - { id: solc.yul, kind: shell, tier: gate, time_budget_s: 1800, command: "TESTER_MODE=solc-yul cargo nextest run -p solar-compiler --test tests", corpus_ref: solc-yul-tests }
   - id: solc.typeck
-    kind: planned_shell
-    tier: planned_gate
+    kind: shell
+    tier: advisory
     corpus_ref: solc-typeerror-tests
     status: blocked_until_typeerror_lane_exists
     notes: "Current TESTER_MODE=solc-solidity is parser-oriented and ignores TypeError exits; a real typeck oracle must pass -Ztypeck, filter TypeError fixtures, and report xfail deltas."
   - id: solc.standard_json.frontend
-    kind: desired_semantic_differential
-    tier: planned_gate
+    kind: semantic_differential
+    tier: advisory
     status: desired_until_standard_json_front_door_exists
     corpus_ref: standard-json-smoke
     reference: { compiler: solc, interface: standard-json, version: "0.8.31" }
     under_test: { compiler: solar, interface: standard-json }
     compare: [errors, sources, contracts, abi, userdoc, devdoc, storageLayout, methodIdentifiers]
   - id: foundry.config
-    kind: planned_shell
-    tier: planned_advisory
+    kind: shell
+    tier: advisory
     time_budget_s: 120
     status: blocked_until_foundry_fixture_selected
     command: "cd $PADS_FOUNDRY_PROJECT && test -f foundry.toml && forge config --json && forge remappings"
     notes: "Do not count forge's default repo-root config as Foundry support; select a real fixture or project path first."
   - id: foundry.standard_json
-    kind: desired_semantic_differential
-    tier: planned_advisory
+    kind: semantic_differential
+    tier: advisory
     status: desired_until_replay_tool_exists
     corpus_ref: foundry-build-info
     reference: { compiler: solc, interface: standard-json }
     under_test: { compiler: solar, interface: standard-json }
     compare: [errors, abi, metadata, storageLayout, build-info]
   - id: mir.roundtrip
-    kind: planned_shell
-    tier: planned_advisory
+    kind: shell
+    tier: advisory
     time_budget_s: 900
     status: blocked_until_mir_crate_exists
     command: "cargo test -p solar-mir"
     notes: "Current main has no solar-mir package, crates/mir, crates/codegen, or solar-mir-opt; these are future target paths for the codegen branch train."
   - id: solc.bytecode
-    kind: desired_differential
-    tier: planned_advisory
+    kind: differential
+    tier: advisory
     status: desired_until_codegen_outputs_exist
     corpus_ref: runtime-micro
     reference: { compiler: solc, normalize: metadata-stripped-bytecode }
     under_test: { compiler: solar, normalize: metadata-stripped-bytecode }
     compare: [creation_bytecode, runtime_bytecode, link_refs, immutable_refs]
   - id: runtime.equivalence
-    kind: desired_hevm_equivalence
-    tier: planned_advisory
+    kind: hevm_equivalence
+    tier: advisory
     status: desired_until_runtime_harness_exists
     corpus_ref: runtime-micro
     compare: [return_data, revert_data, logs, storage, gas]

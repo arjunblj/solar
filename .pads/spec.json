@@ -662,16 +662,16 @@
     },
     {
       "id": "solc.typeck",
-      "kind": "planned_shell",
-      "tier": "planned_gate",
+      "kind": "shell",
+      "tier": "advisory",
       "corpus_ref": "solc-typeerror-tests",
       "status": "blocked_until_typeerror_lane_exists",
       "notes": "Current TESTER_MODE=solc-solidity is parser-oriented and ignores TypeError exits; a real typeck oracle must pass -Ztypeck, filter TypeError fixtures, and report xfail deltas."
     },
     {
       "id": "solc.standard_json.frontend",
-      "kind": "desired_semantic_differential",
-      "tier": "planned_gate",
+      "kind": "semantic_differential",
+      "tier": "advisory",
       "status": "desired_until_standard_json_front_door_exists",
       "corpus_ref": "standard-json-smoke",
       "reference": {
@@ -696,8 +696,8 @@
     },
     {
       "id": "foundry.config",
-      "kind": "planned_shell",
-      "tier": "planned_advisory",
+      "kind": "shell",
+      "tier": "advisory",
       "time_budget_s": 120,
       "status": "blocked_until_foundry_fixture_selected",
       "command": "cd $PADS_FOUNDRY_PROJECT && test -f foundry.toml && forge config --json && forge remappings",
@@ -705,8 +705,8 @@
     },
     {
       "id": "foundry.standard_json",
-      "kind": "desired_semantic_differential",
-      "tier": "planned_advisory",
+      "kind": "semantic_differential",
+      "tier": "advisory",
       "status": "desired_until_replay_tool_exists",
       "corpus_ref": "foundry-build-info",
       "reference": {
@@ -727,8 +727,8 @@
     },
     {
       "id": "mir.roundtrip",
-      "kind": "planned_shell",
-      "tier": "planned_advisory",
+      "kind": "shell",
+      "tier": "advisory",
       "time_budget_s": 900,
       "status": "blocked_until_mir_crate_exists",
       "command": "cargo test -p solar-mir",
@@ -736,8 +736,8 @@
     },
     {
       "id": "solc.bytecode",
-      "kind": "desired_differential",
-      "tier": "planned_advisory",
+      "kind": "differential",
+      "tier": "advisory",
       "status": "desired_until_codegen_outputs_exist",
       "corpus_ref": "runtime-micro",
       "reference": {
@@ -757,8 +757,8 @@
     },
     {
       "id": "runtime.equivalence",
-      "kind": "desired_hevm_equivalence",
-      "tier": "planned_advisory",
+      "kind": "hevm_equivalence",
+      "tier": "advisory",
       "status": "desired_until_runtime_harness_exists",
       "corpus_ref": "runtime-micro",
       "compare": [
