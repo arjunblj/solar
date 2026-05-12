@@ -11,7 +11,7 @@ Solar is a blazingly fast, modular Solidity compiler written in Rust, aiming to 
 Before any non-trivial local or sandboxed work, initialize the repo and toolchain explicitly:
 
 ```bash
-git submodule update --init --checkout
+git submodule update --init --checkout testdata/solidity
 rustup toolchain install 1.88.0 nightly
 rustup component add clippy rustfmt --toolchain 1.88.0
 rustup component add clippy rustfmt --toolchain nightly
@@ -24,6 +24,10 @@ python3 scripts/pads/tier0-guard.py
 
 Sandboxed agents should run `bash .pads/setup.sh` when present; it performs the same
 bootstrap idempotently and keeps `PADS.md` as the source of truth.
+Nested Solidity submodules are intentionally not part of the default bootstrap;
+initialize them only when a selected corpus or upstream build actually requires them.
+Docs/perf helper tools such as `cargo-docs-rs`, `cargo-hack`, and `cargo-codspeed`
+are advisory unless the task explicitly targets those lanes.
 
 For true differential or perf work against solc, provide a pinned local compiler:
 
