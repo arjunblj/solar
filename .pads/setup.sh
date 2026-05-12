@@ -1,9 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-export CARGO_HOME="${CARGO_HOME:-/workspace/.cargo-home}"
-export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/workspace/.cargo-target}"
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+if [[ -z "${PADS_CACHE_ROOT:-}" ]]; then
+  if [[ -d /workspace && -w /workspace ]]; then
+    PADS_CACHE_ROOT=/workspace
+  else
+    PADS_CACHE_ROOT="${TMPDIR:-/tmp}/pads-solar"
+  fi
+fi
+
+export CARGO_HOME="${CARGO_HOME:-$PADS_CACHE_ROOT/.cargo-home}"
+export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$PADS_CACHE_ROOT/.cargo-target}"
 export PATH="$CARGO_HOME/bin:$HOME/.cargo/bin:$HOME/.foundry/bin:$HOME/.solc-select/bin:$PATH"
+
+mkdir -p "$CARGO_HOME" "$CARGO_TARGET_DIR"
 
 git submodule update --init --checkout testdata/solidity
 

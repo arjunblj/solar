@@ -47,7 +47,6 @@ tier0:
       max_api_spend_per_task_usd: 100
     must_pause_for_approval:
       - .github/workflows/**
-      - .pads/tier0.sha256
       - deny.toml
       - clippy.toml
       - rustfmt.toml
@@ -65,6 +64,7 @@ tier0:
   edit_rules:
     - PADS.md is the stable project constitution; .pads/spec.json is the generated mirror.
     - Tier-0 edits require updating PADS.md, .pads/spec.json, and .pads/tier0.sha256 together.
+    - .pads/tier0.sha256 may be updated without human approval only as the checksum output of scripts/pads/tier0-guard.py after paired PADS.md and .pads/spec.json edits; policy-changing Tier-0 edits still need explicit rationale in the PR.
     - Project-specific Solar, solc, Foundry, corpus, and maintainer context belongs here or under .pads, never in pads core.
     - Cargo manifest edits are permitted when they are required for a reviewable compiler or harness slice; Cargo.lock changes must be minimal and explained, and dependency/MSRV/release/publish risk still requires human approval.
     - New durable campaign facts should first go to wiki, memory, tracking issues, or follow-up PRs; update PADS.md when the fact becomes stable project policy.
@@ -89,7 +89,8 @@ campaign_state:
     - whether generated plan/issues/prompts use the organizer completion brief to produce repo-grounded work
 
 sandbox_profile:
-  required_bins: [cargo, rustc, cargo-nextest, typos, solc, solc-select, forge, python3]
+  required_bins: [cargo, rustc, cargo-nextest, typos, python3]
+  oracle_bins: [solc, solc-select, forge]
   optional_bins: [jq, uv, anvil, cargo-hack, cargo-codspeed, cargo-docs-rs, bun, node, pnpm, gh]
   env:
     SOLC_VERSION: "0.8.31"
@@ -101,8 +102,8 @@ sandbox_profile:
     - git submodule update --init --checkout testdata/solidity
     - initialize nested Solidity submodules only when a selected corpus or upstream build requires them
     - cargo fetch --locked
-    - solc --version
-    - forge --version
+    - solc --version if available; otherwise mark solc differential lanes unavailable
+    - forge --version if available; otherwise mark Foundry replay lanes unavailable
     - cargo nextest --version
   cache_paths:
     - .cargo
@@ -367,7 +368,13 @@ oracles:
     reference: { compiler: solc, interface: standard-json, version: "0.8.31" }
     under_test: { compiler: solar, interface: standard-json }
     compare: [errors, sources, contracts, abi, userdoc, devdoc, storageLayout, methodIdentifiers]
-  - { id: foundry.config, kind: shell, tier: advisory, time_budget_s: 120, command: "forge config --json && forge remappings" }
+  - id: foundry.config
+    kind: planned_shell
+    tier: planned_advisory
+    time_budget_s: 120
+    status: blocked_until_foundry_fixture_selected
+    command: "cd $PADS_FOUNDRY_PROJECT && test -f foundry.toml && forge config --json && forge remappings"
+    notes: "Do not count forge's default repo-root config as Foundry support; select a real fixture or project path first."
   - id: foundry.standard_json
     kind: desired_semantic_differential
     tier: planned_advisory
@@ -376,7 +383,13 @@ oracles:
     reference: { compiler: solc, interface: standard-json }
     under_test: { compiler: solar, interface: standard-json }
     compare: [errors, abi, metadata, storageLayout, build-info]
-  - { id: mir.roundtrip, kind: shell, tier: advisory, time_budget_s: 900, command: "cargo test -p solar-mir" }
+  - id: mir.roundtrip
+    kind: planned_shell
+    tier: planned_advisory
+    time_budget_s: 900
+    status: blocked_until_mir_crate_exists
+    command: "cargo test -p solar-mir"
+    notes: "Current main has no solar-mir package, crates/mir, crates/codegen, or solar-mir-opt; these are future target paths for the codegen branch train."
   - id: solc.bytecode
     kind: desired_differential
     tier: planned_advisory
@@ -434,7 +447,9 @@ corpora:
     source: docs.soliditylang.org standard-json examples plus reduced Solar fixtures
     commit: repo-owned
     phase: standard-json
-    setup: ["solc --standard-json < input.json", "solar --standard-json < input.json"]
+    setup:
+      - "solc --standard-json < input.json"
+      - "future: solar --standard-json < input.json after the Solar front door exists"
     proves: ["declared Standard JSON field parity"]
     does_not_prove: ["undeclared output fields", "runtime behavior"]
   - id: foundry-build-info
@@ -680,7 +695,7 @@ Make every future claim measurable. Refresh fork/upstream state, CI baseline, co
 
 Start here:
 
-- Run `.pads/setup.sh` and capture versions for `rustc`, `cargo`, `cargo nextest`, `solc`, `forge`, `anvil`, `jq`, `uv`, Node/npm/pnpm, and optional CodSpeed.
+- Run `.pads/setup.sh` and capture versions for `rustc`, `cargo`, `cargo nextest`, and any available oracle/advisory tools such as `solc`, `forge`, `anvil`, `jq`, `uv`, Node/npm/pnpm, and CodSpeed. Missing oracle tools should mark the affected lanes unavailable, not fail kickoff.
 - Refresh fork and upstream state: current fork `main`, upstream `main`, open fork PRs, watched upstream PRs, watched branches, and latest CI status.
 - Classify current CI failures into required, advisory, environmental, and known-baseline-red. Do not start implementation work until baseline failures are explained.
 - Build the first compatibility matrix skeleton from this file: tracks, corpora, oracles, known unsupported features, proof tiers, and current unknowns.
@@ -798,11 +813,11 @@ Work packages:
 
 Oracles:
 
-- `forge config --json`
-- `forge remappings`
-- `forge build --force --build-info --build-info-path out/build-info`
+- `forge config --json` in a selected fixture or project with a real `foundry.toml`
+- `forge remappings` in a selected fixture or project with real remappings
+- `forge build --force --build-info --build-info-path out/build-info` in a selected fixture or project
 - `solc --standard-json < input.json`
-- `solar --standard-json < input.json`
+- future `solar --standard-json < input.json` after the Solar front door exists
 - normalized diff for selected fields
 
 Done for this phase:

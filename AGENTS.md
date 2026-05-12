@@ -11,23 +11,18 @@ Solar is a blazingly fast, modular Solidity compiler written in Rust, aiming to 
 Before any non-trivial local or sandboxed work, initialize the repo and toolchain explicitly:
 
 ```bash
-git submodule update --init --checkout testdata/solidity
-rustup toolchain install 1.88.0 nightly
-rustup component add clippy rustfmt --toolchain 1.88.0
-rustup component add clippy rustfmt --toolchain nightly
-cargo install --locked cargo-nextest typos-cli cargo-docs-rs
-cargo install cargo-hack cargo-codspeed
-python3 -m pip install --user -r scripts/pads/requirements.txt
-python3 scripts/pads/spec-sync.py
-python3 scripts/pads/tier0-guard.py
+bash .pads/setup.sh
 ```
 
 Sandboxed agents should run `bash .pads/setup.sh` when present; it performs the same
 bootstrap idempotently and keeps `PADS.md` as the source of truth.
+The setup script is safe both in container sandboxes and local checkouts; when `/workspace`
+is absent it uses a temporary cache root unless `CARGO_HOME` or `CARGO_TARGET_DIR` is set.
 Nested Solidity submodules are intentionally not part of the default bootstrap;
 initialize them only when a selected corpus or upstream build actually requires them.
 Docs/perf helper tools such as `cargo-docs-rs`, `cargo-hack`, and `cargo-codspeed`
-are advisory unless the task explicitly targets those lanes.
+are advisory unless the task explicitly targets those lanes; install them with
+`PADS_INSTALL_ADVISORY_TOOLS=1 bash .pads/setup.sh`.
 
 For true differential or perf work against solc, provide a pinned local compiler:
 
@@ -48,7 +43,7 @@ cargo run -- file.sol                            # Run compiler
 cargo run -- -Zhelp                              # Unstable flags help
 ```
 
-The `testdata/solidity` submodule is required for corpus-backed test modes. `TESTER_MODE=solc-solidity` and `TESTER_MODE=solc-yul` are strong corpus oracles, but they are not a substitute for running against a real `solc` binary when claiming differential parity.
+The `testdata/solidity` submodule is required for corpus-backed test modes. `TESTER_MODE=solc-solidity` and `TESTER_MODE=solc-yul` are parser/Yul corpus oracles, but they are not a substitute for running against a real `solc` binary when claiming differential parity. `TESTER_MODE=solc-solidity` does not prove TypeError or typechecker parity until a distinct `-Ztypeck`/TypeError lane exists.
 
 ## Architecture
 
