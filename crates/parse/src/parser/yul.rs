@@ -85,6 +85,13 @@ impl<'sess, 'ast> Parser<'sess, 'ast> {
     fn parse_yul_lit(&mut self) -> PResult<'sess, Lit<'ast>> {
         let (lit, subdenomination) = self.parse_lit(false)?;
         assert!(subdenomination.is_none());
+        if let LitKind::Number(symbol, _) = lit.kind {
+            let text = symbol.as_str();
+            if text.starts_with('.') || text.ends_with('.') {
+                let msg = "invalid Yul number literal";
+                return Err(self.dcx().err(msg).span(lit.span));
+            }
+        }
         Ok(lit)
     }
 
