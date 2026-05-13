@@ -82,6 +82,13 @@ pub struct Opts {
         arg(help_heading = "Input options", long, value_enum, default_value_t, hide = true)
     )]
     pub language: Language,
+    /// Switch to the Solidity compiler Standard JSON input/output interface.
+    ///
+    /// The JSON input is read from standard input, or from the first input file if one is
+    /// provided. Diagnostics and selected artifacts are written as a single JSON object to
+    /// standard output.
+    #[cfg_attr(feature = "clap", arg(help_heading = "Input options", long))]
+    pub standard_json: bool,
 
     /// Number of threads to use. Zero specifies the number of logical cores.
     #[cfg_attr(feature = "clap", arg(long, short = 'j', visible_alias = "jobs", default_value_t))]
