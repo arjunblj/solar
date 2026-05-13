@@ -71,15 +71,15 @@ tier0:
     - This file is policy, context, and a senior-engineer briefing. It is not a backlog template. Generated GitHub issues should be substantial components of work that yield meaningful PRs, not a mechanical decomposition of this file's headings, tracks, oracles, or tier numbers.
 
 campaign_state:
-  epoch: "2026-05-12"
-  fork_main_commit: "9aad57d6956812b8b9b80a8d097d524fb6d5314d"
-  upstream_main_commit: "d79be54cb8ffb398b8185d1c3c12b387c745835c"
+  epoch: "2026-05-13"
+  fork_main_commit: "8d26b642fe195b4594d8509e07120cce70a80149"
+  upstream_main_commit: "0573b99c26c4ed5ff951ecd8e16e11f652fdaff8"
   upstream_codegen_mir_commit: "69d2521c02d5d4ca63c8ba2598b2d67bdf099280"
   upstream_runtime_equivalence_pr: "paradigmxyz/solar#760"
-  organizer_completion_brief: "2026-05-12 Solar completion context distilled from fresh local repo and upstream audit"
-  refresh_before_dispatch: true
+  organizer_completion_brief: "2026-05-13 Solar completion context after upstream main refresh and Pads quality-loop audit"
+  refresh_before_dispatch: false
   refresh_items:
-    - fork compare against upstream main
+    - fork compare against upstream main only when planner evidence cites stale upstream state
     - fork open PRs and unsafe dependency updates
     - upstream issue and PR watchlist state
     - upstream branch state, especially feat/codegen-mir and active typeck branches
@@ -209,7 +209,7 @@ branch_policy:
       mode: cherry_pick
       priority: high
       related: ["paradigmxyz/solar#743", "paradigmxyz/solar#744", "paradigmxyz/solar#755", "paradigmxyz/solar#758", "paradigmxyz/solar#761"]
-      notes: "Narrow parser/diagnostic/sema fixes; verify freshness and tests before importing. PR #761 is a high-value first candidate because it is a small sema fix with green upstream CI."
+      notes: "Narrow parser/diagnostic/sema fixes; verify freshness and tests before importing. PR #761 is already included in fork main as 0573b99/8d26b64, so do not generate it as new work."
     - id: divergence-caution
       source: paradigmxyz/solar
       upstream_ref: issues/547
@@ -521,9 +521,10 @@ completion_contract:
 extensions:
   solar:
     current_snapshot:
-      fork_main_commit: "9aad57d6956812b8b9b80a8d097d524fb6d5314d"
-      upstream_main_commit: "d79be54cb8ffb398b8185d1c3c12b387c745835c"
+      fork_main_commit: "8d26b642fe195b4594d8509e07120cce70a80149"
+      upstream_main_commit: "0573b99c26c4ed5ff951ecd8e16e11f652fdaff8"
       compare_url: "https://github.com/paradigmxyz/solar/compare/main...arjunblj:main"
+      upstream_refresh_note: "Fork main includes upstream PR #761 bare integer alias canonicalization. Treat further upstream refresh as event-driven context repair, not a required pre-dispatch ritual."
     unsafe_fork_prs:
       - "arjunblj/solar#556: weekly Cargo.lock update pulls crates requiring Rust 1.90/1.91.1 while rust-toolchain.toml pins 1.88.0."
     ci_baseline:
@@ -535,6 +536,71 @@ extensions:
       - "Make progress little by little to keep upstream code quality high."
       - "Foundry integration and mixed solc/Solar runtime testing are first-class."
       - "Performance only matters with correctness and benchmark evidence."
+    current_state:
+      shipped:
+        - lexer/parser, AST, diagnostics, file resolver, HIR lowering, sema/typeck WIP, ABI/hash emission, UI tests, solc syntax and Yul corpus runners
+        - upstream bare integer alias canonicalization from paradigmxyz/solar#761 is present in this fork
+      not_shipped:
+        - production Standard JSON front door
+        - real TypeError/-Ztypeck corpus oracle with non-ignored exits
+        - Foundry build-info replay through Solar
+        - bytecode/codegen/runtime equivalence on main
+      current_default_principle: "Prefer measured gaps and proof-producing tooling over compatibility claims."
+    known_gaps:
+      - id: oracle_inventory_missing
+        track: compatibility-matrix
+        current_evidence: "PADS and AGENTS define commands, but no deterministic repo-owned report yet records tool versions, corpus counts, skip counts, and supported oracle tiers."
+        next_measurement: "Create a small repo-native oracle inventory report before dispatching broad compatibility fixes."
+        proof_boundary: "Measurement artifact only; does not claim compatibility improvement."
+      - id: standard_json_frontdoor_missing
+        track: standard-json
+        current_evidence: "Current main exposes combined-json style ABI/hash output, but no production Standard JSON stdin/stdout front door."
+        next_measurement: "Identify CLI/config/sema entry points and supported minimal fields before artifact parity work."
+        proof_boundary: "A first PR may claim only supported input fields and honest unsupported-field diagnostics."
+      - id: typeerror_lane_missing
+        track: typeck-corpus
+        current_evidence: "TESTER_MODE=solc-solidity is parser-oriented; it is not a TypeError/typeck parity oracle."
+        next_measurement: "Add or tighten a distinct TypeError/-Ztypeck lane with pass/fail/unsupported/xfail counters."
+        proof_boundary: "Do not claim typechecker corpus movement until the lane names fixture IDs and exit semantics."
+      - id: foundry_build_info_capture_missing
+        track: foundry-hardhat
+        current_evidence: "Foundry oracles are advisory until a real fixture/project path is selected."
+        next_measurement: "Capture forge config/remappings/build-info for a tiny pinned fixture without claiming Solar replay support."
+        proof_boundary: "Input capture only; no runtime or build correctness claim."
+      - id: bytecode_equivalence_future
+        track: runtime-equivalence
+        current_evidence: "Main lacks production codegen/bytecode output; upstream codegen branches are source material only."
+        next_measurement: "Build comparator/mismatch artifact schema or mine upstream branch slices after prerequisites exist."
+        proof_boundary: "Infrastructure-only unless Solar can emit bytecode for selected subset."
+    starter_calibration_slices:
+      - title: Oracle inventory and baseline ledger
+        mode: calibration
+        unlocks: "All later measured tasks cite current tool/corpus/support state instead of guessing."
+        proof: "deterministic JSON or markdown report with tool versions, corpus counts, skip/xfail counts, and unavailable oracles"
+      - title: Minimal Standard JSON front door
+        mode: calibration
+        unlocks: "Diagnostics, ABI, metadata, storage layout, and project replay can share the same integration surface."
+        proof: "stdin JSON parse plus supported language/sources/settings subset and unsupported-field diagnostics"
+      - title: TypeError measurement lane
+        mode: calibration
+        unlocks: "Typeck implementation tasks can target named fixture families instead of broad corpus themes."
+        proof: "TESTER_MODE or equivalent lane with -Ztypeck semantics, counters, xfail schema, and fixture IDs"
+      - title: Foundry build-info capture
+        mode: calibration
+        unlocks: "Framework replay tasks can consume real Standard JSON inputs without claiming runtime support."
+        proof: "forge config/remappings/build-info captured from a pinned tiny fixture"
+    continuation_rules:
+      - "After a measurement artifact lands, choose implementation work from the largest newly measured failing family with owner files and a cheapest oracle."
+      - "After a Standard JSON front-door PR lands, advance diagnostics/source identity before artifact-output parity."
+      - "After a review rejects a patch for missing fixture IDs or proof, create a measurement task unless the fixture family is already known."
+      - "After upstream moves in an owned lane, refresh only that lane's evidence before dispatching related work."
+      - "Do not replay calibration slices once they have produced their unlock artifact; continue from live evidence."
+    pr_proof_rules:
+      - "Semantic PRs need at least one non-format proof or an explicit typed reason why the task is measurement-only."
+      - "Formatter evidence is a checkpoint, not a compatibility proof."
+      - "Corpus PRs must name fixture IDs, corpus path family, solc version, and pass/fail/unsupported delta."
+      - "Standard JSON PRs must name supported fields and unsupported outputs."
+      - "Branch-mining PRs must name upstream commit(s), omitted work, conflicts, and local proof boundary."
 
 non_goals:
   - SMTChecker parity unless separately approved.
