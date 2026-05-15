@@ -5,7 +5,12 @@
 #![allow(unreachable_pub)]
 
 use eyre::{Result, eyre};
-use std::path::Path;
+use std::{
+    ffi::OsString,
+    fs,
+    path::{Path, PathBuf},
+    process::{Command, Stdio},
+};
 use ui_test::{color_eyre::eyre, spanned::Spanned};
 
 mod errors;
@@ -50,15 +55,212 @@ pub fn run_tests(cmd: &'static Path) -> Result<()> {
         let gha_emitter = ui_test::status_emitter::Gha { name: mode.to_string(), group: true };
         let status_emitter = (text_emitter, gha_emitter);
 
-        ui_test::run_tests_generic(
+        let baseline = BaselineReport::new(cmd, &config, cfg);
+        baseline.print_start();
+
+        let result = ui_test::run_tests_generic(
             vec![config],
             move |path, config| file_filter(path, config, cfg),
             move |config, contents| per_file_config(config, contents, cfg),
             status_emitter,
-        )?;
+        );
+        match result {
+            Ok(()) => baseline.print_clean(),
+            Err(err) => {
+                baseline.print_red();
+                return Err(err);
+            }
+        }
     }
 
     Ok(())
+}
+
+struct BaselineReport<'a> {
+    cmd: &'static Path,
+    mode: Mode,
+    root_dir: PathBuf,
+    tmp_dir: &'a Path,
+    counts: CorpusCounts,
+}
+
+impl<'a> BaselineReport<'a> {
+    fn new(cmd: &'static Path, config: &ui_test::Config, cfg: MyConfig<'a>) -> Self {
+        let counts = CorpusCounts::collect(config, cfg);
+        Self {
+            cmd,
+            mode: cfg.mode,
+            root_dir: config.root_dir.clone(),
+            tmp_dir: cfg.tmp_dir,
+            counts,
+        }
+    }
+
+    fn print_start(&self) {
+        eprintln!(
+            "oracle-baseline: mode={} status=running corpus_total={} corpus_included={} corpus_skipped={} {}",
+            self.mode,
+            self.counts.total,
+            self.counts.included.len(),
+            self.counts.skipped,
+            self.solc_summary(),
+        );
+    }
+
+    fn print_clean(&self) {
+        eprintln!(
+            "oracle-baseline: mode={} status=clean reporter=ok top_failing_fixture_ids=[]",
+            self.mode,
+        );
+    }
+
+    fn print_red(&self) {
+        match self.top_failing_fixture_ids(10) {
+            Ok(ids) if !ids.is_empty() => eprintln!(
+                "oracle-baseline: mode={} status=inherited-red reporter=ok top_failing_fixture_ids=[{}]",
+                self.mode,
+                ids.join(","),
+            ),
+            Ok(_) => eprintln!(
+                "oracle-baseline: mode={} status=reporter-regression reporter=needs-investigation top_failing_fixture_ids=[]",
+                self.mode,
+            ),
+            Err(err) => eprintln!(
+                "oracle-baseline: mode={} status=reporter-regression reporter=error reason={err:?} top_failing_fixture_ids=[]",
+                self.mode,
+            ),
+        }
+    }
+
+    fn solc_summary(&self) -> String {
+        if !self.mode.is_solc() {
+            return "solc=not-required".to_string();
+        }
+        let Some(path) = std::env::var_os("SOLC") else {
+            return "solc=missing(SOLC not set; corpus parser oracle does not invoke solc)"
+                .to_string();
+        };
+        let path = PathBuf::from(path);
+        let version = Command::new(&path)
+            .arg("--version")
+            .output()
+            .ok()
+            .and_then(|output| output.status.success().then_some(output.stdout))
+            .and_then(|stdout| String::from_utf8(stdout).ok())
+            .and_then(|stdout| {
+                stdout
+                    .lines()
+                    .map(str::trim)
+                    .find(|line| line.starts_with("Version:"))
+                    .or_else(|| stdout.lines().map(str::trim).find(|line| !line.is_empty()))
+                    .map(str::to_owned)
+            })
+            .unwrap_or_else(|| "<version unavailable>".to_string());
+        format!("solc_path={} solc_version={}", path.display(), version)
+    }
+
+    fn top_failing_fixture_ids(&self, limit: usize) -> Result<Vec<String>> {
+        if !self.mode.is_solc() {
+            return Ok(Vec::new());
+        }
+
+        let mut ids = Vec::new();
+        for path in &self.counts.included {
+            if !self.solc_fixture_matches_baseline(path)? {
+                ids.push(fixture_id(&self.root_dir, path));
+                if ids.len() >= limit {
+                    break;
+                }
+            }
+        }
+        Ok(ids)
+    }
+
+    fn solc_fixture_matches_baseline(&self, path: &Path) -> Result<bool> {
+        let src = fs::read_to_string(path)?;
+        let Some(expected) = solc_expected_exit_code(&src) else {
+            return Ok(true);
+        };
+
+        let mut args = solar_args(self.mode);
+        let mut append_input = true;
+        if matches!(self.mode, Mode::SolcSolidity) {
+            append_input =
+                !solc::solidity::handle_delimiters(&src, path, self.tmp_dir, |arg| args.push(arg));
+        }
+        if append_input {
+            args.push(path.into());
+        }
+
+        let status = Command::new(self.cmd)
+            .args(args)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()?;
+        Ok(status.code() == Some(expected))
+    }
+}
+
+#[derive(Default)]
+struct CorpusCounts {
+    total: usize,
+    included: Vec<PathBuf>,
+    skipped: usize,
+}
+
+impl CorpusCounts {
+    fn collect(config: &ui_test::Config, cfg: MyConfig<'_>) -> Self {
+        let mut counts = Self::default();
+        let mut files = Vec::new();
+        collect_files(&config.root_dir, &mut files);
+        files.sort();
+        for path in files {
+            if !cfg.mode.is_candidate_file(&path) {
+                continue;
+            }
+            counts.total += 1;
+            if matches!(file_filter(&path, config, cfg), Some(true)) {
+                counts.included.push(path);
+            } else {
+                counts.skipped += 1;
+            }
+        }
+        counts
+    }
+}
+
+fn collect_files(dir: &Path, files: &mut Vec<PathBuf>) {
+    let Ok(entries) = fs::read_dir(dir) else { return };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_files(&path, files);
+        } else if path.is_file() {
+            files.push(path);
+        }
+    }
+}
+
+fn solar_args(mode: Mode) -> Vec<OsString> {
+    let mut args = vec!["-j1", "--error-format=rustc-json", "-Zui-testing", "-Zparse-yul"];
+    if mode.is_solc() {
+        args.push("--stop-after=parsing");
+    }
+    args.into_iter().map(Into::into).collect()
+}
+
+fn solc_expected_exit_code(src: &str) -> Option<i32> {
+    let expected_errors = errors::Error::load_solc(src);
+    let expected_error = expected_errors.iter().find(|e| e.is_error());
+    if let Some(expected_error) = expected_error {
+        expected_error.solc_kind.is_some_and(|kind| kind.is_parser_error()).then_some(1)
+    } else {
+        Some(0)
+    }
+}
+
+fn fixture_id(root_dir: &Path, path: &Path) -> String {
+    path.strip_prefix(root_dir).unwrap_or(path).to_string_lossy().replace('\\', "/")
 }
 
 fn config(cmd: &'static Path, args: &ui_test::Args, mode: Mode) -> ui_test::Config {
@@ -83,14 +285,7 @@ fn config(cmd: &'static Path, args: &ui_test::Args, mode: Mode) -> ui_test::Conf
         root_dir: tests_root,
         program: ui_test::CommandBuilder {
             program: cmd.into(),
-            args: {
-                let mut args =
-                    vec!["-j1", "--error-format=rustc-json", "-Zui-testing", "-Zparse-yul"];
-                if mode.is_solc() {
-                    args.push("--stop-after=parsing");
-                }
-                args.into_iter().map(Into::into).collect()
-            },
+            args: solar_args(mode),
             out_dir_flag: None,
             input_file_flag: None,
             envs: vec![],
@@ -210,18 +405,8 @@ fn per_file_config(config: &mut ui_test::Config, file: &Spanned<Vec<u8>>, cfg: M
 // For solc tests, we can't expect errors normally since we have different diagnostics.
 // Instead, we check just the error code and ignore other output.
 fn solc_per_file_config(config: &mut ui_test::Config, src: &str, path: &Path, cfg: MyConfig<'_>) {
-    let expected_errors = errors::Error::load_solc(src);
-    let expected_error = expected_errors.iter().find(|e| e.is_error());
-    let code = if let Some(expected_error) = expected_error {
-        // Expect failure only for parser errors, otherwise ignore exit code.
-        if expected_error.solc_kind.is_some_and(|kind| kind.is_parser_error()) {
-            Some(1)
-        } else {
-            None
-        }
-    } else {
-        Some(0)
-    };
+    // Expect failure only for parser errors, otherwise ignore exit code.
+    let code = solc_expected_exit_code(src);
     config.comment_defaults.base().exit_status = code.map(Spanned::dummy).into();
 
     if matches!(cfg.mode, Mode::SolcSolidity) {
@@ -267,6 +452,12 @@ impl Mode {
 
     fn allows_yul(self) -> bool {
         !matches!(self, Self::SolcSolidity)
+    }
+
+    fn is_candidate_file(self, path: &Path) -> bool {
+        path.extension()
+            .and_then(|ext| ext.to_str())
+            .is_some_and(|ext| ext == "sol" || (self.allows_yul() && ext == "yul"))
     }
 }
 
