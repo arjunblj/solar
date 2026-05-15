@@ -86,8 +86,10 @@ fn config(cmd: &'static Path, args: &ui_test::Args, mode: Mode) -> ui_test::Conf
             args: {
                 let mut args =
                     vec!["-j1", "--error-format=rustc-json", "-Zui-testing", "-Zparse-yul"];
-                if mode.is_solc() {
-                    args.push("--stop-after=parsing");
+                match mode {
+                    Mode::SolcSolidity => args.push("-Ztypeck"),
+                    Mode::SolcYul => args.push("--stop-after=parsing"),
+                    Mode::Ui => {}
                 }
                 args.into_iter().map(Into::into).collect()
             },
@@ -213,8 +215,10 @@ fn solc_per_file_config(config: &mut ui_test::Config, src: &str, path: &Path, cf
     let expected_errors = errors::Error::load_solc(src);
     let expected_error = expected_errors.iter().find(|e| e.is_error());
     let code = if let Some(expected_error) = expected_error {
-        // Expect failure only for parser errors, otherwise ignore exit code.
-        if expected_error.solc_kind.is_some_and(|kind| kind.is_parser_error()) {
+        // Expect failure for diagnostics in the compiler phases this corpus mode runs.
+        if expected_error.solc_kind.is_some_and(|kind| {
+            kind.is_parser_error() || cfg.mode.checks_solidity_typeck() && kind.is_typeck_error()
+        }) {
             Some(1)
         } else {
             None
@@ -267,6 +271,10 @@ impl Mode {
 
     fn allows_yul(self) -> bool {
         !matches!(self, Self::SolcSolidity)
+    }
+
+    fn checks_solidity_typeck(self) -> bool {
+        matches!(self, Self::SolcSolidity)
     }
 }
 
