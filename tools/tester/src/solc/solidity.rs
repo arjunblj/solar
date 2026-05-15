@@ -1,3 +1,4 @@
+use super::FixtureReason;
 use crate::utils::path_contains_curry;
 use std::{
     ffi::OsString,
@@ -6,51 +7,60 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
-pub(crate) fn should_skip(path: &Path) -> Result<(), &'static str> {
+const OWNER_TRACK: &str = "lane-frontend-corpus";
+const ORACLE: &str = "solc-solidity parser corpus";
+const REVISIT: &str =
+    "Revisit when Solar parser/typeck support for this Solidity corpus gap changes.";
+
+const fn skip(reason: &'static str) -> FixtureReason {
+    FixtureReason::new(reason, OWNER_TRACK, ORACLE, REVISIT)
+}
+
+pub(crate) fn should_skip(path: &Path) -> Result<(), FixtureReason> {
     let path_contains = path_contains_curry(path);
 
     if path_contains("/libyul/") {
-        return Err("actually a Yul test");
+        return Err(skip("actually a Yul test"));
     }
 
     if path_contains("/cmdlineTests/") {
-        return Err("CLI tests do not have the same format as everything else");
+        return Err(skip("CLI tests do not have the same format as everything else"));
     }
 
     if path_contains("/lsp/") {
-        return Err("LSP tests do not have the same format as everything else");
+        return Err(skip("LSP tests do not have the same format as everything else"));
     }
 
     if path_contains("/ASTJSON/") {
-        return Err("no JSON AST");
+        return Err(skip("no JSON AST"));
     }
 
     if path_contains("/functionDependencyGraphTests/") || path_contains("/experimental") {
-        return Err("solidity experimental is not implemented");
+        return Err(skip("solidity experimental is not implemented"));
     }
 
     // We don't parse licenses.
     if path_contains("/license/") {
-        return Err("licenses are not checked");
+        return Err(skip("licenses are not checked"));
     }
 
     if path_contains("natspec") {
-        return Err("natspec is not checked");
+        return Err(skip("natspec is not checked"));
     }
 
     if path_contains("_direction_override") {
-        return Err("Unicode direction override checks not implemented");
+        return Err(skip("Unicode direction override checks not implemented"));
     }
 
     if path_contains("wrong_compiler_") {
-        return Err("Solidity pragma version is not checked");
+        return Err(skip("Solidity pragma version is not checked"));
     }
 
     // Directories starting with `_` are not tests.
     if path_contains("/_")
         && !path.components().next_back().unwrap().as_os_str().to_str().unwrap().starts_with('_')
     {
-        return Err("supporting file");
+        return Err(skip("supporting file"));
     }
 
     let stem = path.file_stem().unwrap().to_str().unwrap();
@@ -106,7 +116,7 @@ pub(crate) fn should_skip(path: &Path) -> Result<(), &'static str> {
         | "mapping_nonelementary_key_1"
         | "mapping_nonelementary_key_4"
     ) {
-        return Err("manually skipped");
+        return Err(skip("manually skipped"));
     };
 
     Ok(())

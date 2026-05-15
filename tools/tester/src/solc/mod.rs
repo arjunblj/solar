@@ -5,6 +5,39 @@ use std::fmt;
 pub(crate) mod solidity;
 pub(crate) mod yul;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct FixtureReason {
+    pub reason: &'static str,
+    pub owner_track: &'static str,
+    pub oracle: &'static str,
+    pub revisit: &'static str,
+}
+
+impl FixtureReason {
+    pub(crate) const fn new(
+        reason: &'static str,
+        owner_track: &'static str,
+        oracle: &'static str,
+        revisit: &'static str,
+    ) -> Self {
+        Self { reason, owner_track, oracle, revisit }
+    }
+
+    pub(crate) fn missing_field(self) -> Option<&'static str> {
+        if self.reason.trim().is_empty() {
+            Some("reason")
+        } else if self.owner_track.trim().is_empty() {
+            Some("owner_track")
+        } else if self.oracle.trim().is_empty() {
+            Some("oracle")
+        } else if self.revisit.trim().is_empty() {
+            Some("revisit")
+        } else {
+            None
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SolcError {
     pub kind: SolcErrorKind,

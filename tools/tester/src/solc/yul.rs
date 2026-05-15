@@ -1,15 +1,24 @@
+use super::FixtureReason;
 use crate::utils::path_contains_curry;
 use std::path::Path;
 
-pub(crate) fn should_skip(path: &Path) -> Result<(), &'static str> {
+const OWNER_TRACK: &str = "lane-frontend-corpus";
+const ORACLE: &str = "solc-yul parser corpus";
+const REVISIT: &str = "Revisit when Solar Yul parser support for this corpus gap changes.";
+
+const fn skip(reason: &'static str) -> FixtureReason {
+    FixtureReason::new(reason, OWNER_TRACK, ORACLE, REVISIT)
+}
+
+pub(crate) fn should_skip(path: &Path) -> Result<(), FixtureReason> {
     let path_contains = path_contains_curry(path);
 
     if path_contains("/recursion_depth.yul") {
-        return Err("recursion stack overflow");
+        return Err(skip("recursion stack overflow"));
     }
 
     if path_contains("/verbatim") {
-        return Err("verbatim Yul builtin is not implemented");
+        return Err(skip("verbatim Yul builtin is not implemented"));
     }
 
     if path_contains("/period_in_identifier")
@@ -19,16 +28,16 @@ pub(crate) fn should_skip(path: &Path) -> Result<(), &'static str> {
         // Why does Solc parse periods as part of Yul identifiers?
         // `yul-identifier` is the same as `solidity-identifier`, which disallows periods:
         // https://docs.soliditylang.org/en/latest/grammar.html#a4.SolidityLexer.YulIdentifier
-        return Err("not actually valid identifiers");
+        return Err(skip("not actually valid identifiers"));
     }
 
     if path_contains("objects/conflict_") || path_contains("objects/code.yul") {
         // Not the parser's job to check conflicting names.
-        return Err("not implemented in the parser");
+        return Err(skip("not implemented in the parser"));
     }
 
     if path_contains(".sol") {
-        return Err("not a Yul file");
+        return Err(skip("not a Yul file"));
     }
 
     let stem = path.file_stem().unwrap().to_str().unwrap();
@@ -69,7 +78,7 @@ pub(crate) fn should_skip(path: &Path) -> Result<(), &'static str> {
         | "clash_with_reserved_pure_yul_builtin"
         | "clz"
     ) {
-        return Err("manually skipped");
+        return Err(skip("manually skipped"));
     };
 
     Ok(())
