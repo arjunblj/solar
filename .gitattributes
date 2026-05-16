@@ -2,3 +2,9 @@
 *.sol linguist-language=Solidity
 *.yul linguist-language=Yul
 /testdata/* linguist-vendored
+
+# .pads/spec.json is regenerated from PADS.md frontmatter by
+# scripts/pads/spec-sync.py. Treat it as generated for GitHub language
+# stats and review collapsing, and use union merge so concurrent edits
+# on different branches do not produce dumb conflicts.
+/.pads/spec.json linguist-generated=true merge=union

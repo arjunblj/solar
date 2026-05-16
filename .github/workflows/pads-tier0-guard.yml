@@ -4,7 +4,10 @@ on:
   pull_request:
     paths:
       - 'PADS.md'
+      - '.pads/README.md'
+      - '.pads/rules/**'
       - '.pads/spec.json'
+      - '.pads/setup.sh'
       - '.pads/tier0.sha256'
       - 'scripts/pads/**'
       - '.github/workflows/pads-tier0-guard.yml'
@@ -33,3 +36,6 @@ jobs:
 
       - name: Verify Tier-0 hash
         run: python3 scripts/pads/tier0-guard.py --spec PADS.md --expected .pads/tier0.sha256
+
+      - name: Verify PADS structural cross-references
+        run: python3 scripts/pads/validate.py --json .pads/spec.json

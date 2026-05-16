@@ -6,6 +6,19 @@ Guidance for AI coding agents working in this repository.
 
 Solar is a blazingly fast, modular Solidity compiler written in Rust, aiming to be a modern alternative to solc.
 
+## Ingestion Order For Autonomous Sessions
+
+This file is a coding-style and command reference. The campaign constitution lives in `PADS.md`. A fresh autonomous session should ingest in this order before planning or dispatching work:
+
+1. `PADS.md` — constitution, organizer brief, tracks, oracles, completion contract, phase model.
+2. `AGENTS.md` (this file) — house style, commands, diagnostics conventions.
+3. `.pads/spec.json` — canonical JSON mirror of `PADS.md` for structured access.
+4. `.pads/README.md` — directory manifest and per-file edit flow.
+5. `.pads/rules/oracles.md` — verified test invocations and proof discipline.
+6. `.pads/rules/pr-rubric.md` — what a publishable PR must contain.
+7. `.pads/rules/upstream-map.md`, `.pads/rules/feature-matrix.md`, `.pads/rules/foundry-readiness.md`, `.pads/rules/performance.md` — read when the task touches that surface.
+8. `bash .pads/setup.sh` — idempotent bootstrap. Records tool versions, runs spec/Tier-0/validate guards, fetches deps.
+
 ## Bootstrap
 
 Before any non-trivial local or sandboxed work, initialize the repo and toolchain explicitly:

@@ -1,6 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+check_only=0
+case "${1:-}" in
+  "")
+    ;;
+  --check)
+    check_only=1
+    ;;
+  -h|--help)
+    echo "usage: bash .pads/setup.sh [--check]"
+    echo "  --check  report readiness/tool versions without installing anything"
+    exit 0
+    ;;
+  *)
+    echo "usage: bash .pads/setup.sh [--check]" >&2
+    exit 2
+    ;;
+esac
+
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 if [[ -z "${PADS_CACHE_ROOT:-}" ]]; then
   if [[ -d /workspace && -w /workspace ]]; then
@@ -13,6 +31,41 @@ fi
 export CARGO_HOME="${CARGO_HOME:-$PADS_CACHE_ROOT/.cargo-home}"
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$PADS_CACHE_ROOT/.cargo-target}"
 export PATH="$CARGO_HOME/bin:$HOME/.cargo/bin:$HOME/.foundry/bin:$HOME/.solc-select/bin:$PATH"
+
+print_tool_versions() {
+  echo "[pads/setup] tool versions"
+  rustc --version || true
+  cargo --version || true
+  cargo nextest --version || true
+  typos --version || true
+  forge --version || true
+  if [[ -n "${SOLC:-}" ]]; then
+    "$SOLC" --version || true
+  else
+    echo "[pads/setup] SOLC is unset"
+  fi
+  jq --version || true
+  uv --version || true
+  node --version || true
+  npm --version || true
+  pnpm --version || true
+  anvil --version || true
+  if command -v cargo-codspeed >/dev/null 2>&1; then
+    cargo codspeed --version || true
+  else
+    echo "[pads/setup] cargo-codspeed unavailable"
+  fi
+  echo "[pads/setup] SOLC=${SOLC:-}"
+}
+
+if [[ -z "${SOLC:-}" ]] && command -v solc >/dev/null 2>&1; then
+  export SOLC="$(command -v solc)"
+fi
+
+if [[ "$check_only" == "1" ]]; then
+  print_tool_versions
+  exit 0
+fi
 
 mkdir -p "$CARGO_HOME" "$CARGO_TARGET_DIR"
 
@@ -69,23 +122,8 @@ fi
 python3 -m pip install --user -r scripts/pads/requirements.txt
 python3 scripts/pads/spec-sync.py
 python3 scripts/pads/tier0-guard.py
+python3 scripts/pads/validate.py
 
 cargo fetch --locked
 
-echo "[pads/setup] tool versions"
-rustc --version
-cargo --version
-cargo nextest --version
-typos --version
-forge --version
-if [[ -n "${SOLC:-}" ]]; then
-  "$SOLC" --version
-fi
-jq --version || true
-uv --version || true
-node --version || true
-npm --version || true
-pnpm --version || true
-anvil --version || true
-cargo codspeed --version || true
-echo "[pads/setup] SOLC=$SOLC"
+print_tool_versions
