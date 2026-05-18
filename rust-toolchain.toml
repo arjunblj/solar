@@ -1,0 +1,9 @@
+[toolchain]
+# Pinned to match `Cargo.toml` workspace.package.rust-version (MSRV 1.95).
+# The previous 1.88 channel was older than the workspace MSRV, so a clean
+# `cargo check` from a fresh sandbox would fail with "package requires
+# rustc 1.95". Keeping these aligned is the cheapest fix; updating the MSRV
+# downstream would require workspace-wide review.
+channel = "1.95.0"
+profile = "minimal"
+components = ["clippy", "rustfmt"]
