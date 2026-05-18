@@ -812,68 +812,17 @@ extensions:
           PRs without a correctness gate are rejected per `## Performance
           Protocol`.
 
-    # Concrete first-wave PR candidates. Each is a complete reviewable
-    # slice with named files, oracle, expected diff size, and the gap it
-    # closes. The planner SHOULD pick one of these (or an equivalent that
-    # closes a listed known_gap) before inventing new work.
-    first_pr_candidates:
-      - id: pr-baseline-ledger
-        title: "tools(tester): emit baseline oracle ledger to .pads-artifacts"
-        closes_gap: oracle_inventory_missing
-        files:
-          - scripts/pads/baseline-ledger.py
-          - .pads/setup.sh
-        evidence_required:
-          - "Sample `.pads-artifacts/baseline.json` checked in for the current fork commit."
-          - "Counts for `Mode::Ui`, `Mode::SolcSolidity`, `Mode::SolcYul` modes today."
-        size: "small (~150-250 lines)"
-      - id: pr-typeck-lane
-        title: "tools(tester): add SolcSolidityTypeck mode and run nameAndTypeResolution under -Ztypeck"
-        closes_gap: typeerror_lane_missing
-        files:
-          - tools/tester/src/lib.rs
-          - tools/tester/src/solc/solidity.rs
-          - tests/ui/typeck/  # one new fixture demonstrating the lane
-        evidence_required:
-          - "Pass/fail counts for `nameAndTypeResolution` under `-Ztypeck` listed in PR body."
-          - "Cite upstream tracker #615."
-          - "Diff includes one new UI fixture proving the lane runs end-to-end."
-        size: "medium (~150-250 lines)"
-      - id: pr-standard-json-frontdoor
-        title: "feat(cli): wire --standard-json stdin parsing for Solidity language with frontend-only subset"
-        closes_gap: standard_json_frontdoor_missing
-        files:
-          - crates/cli/src/args.rs
-          - crates/cli/src/lib.rs
-          - crates/interface/src/lib.rs
-          - tests/cli/standard_json/  # new fixture dir
-        evidence_required:
-          - "Output of `cargo run -- --standard-json < scripts/standard_json_template.json` in PR body."
-          - "Field-by-field diff vs `solc 0.8.31 --standard-json` for `errors[].sourceLocation`, `errors[].errorCode`, `errors[].type`."
-          - "Explicit `unsupportedSettings[]` entry for any setting Solar does not honor."
-        size: "medium-large (~250-400 lines)"
-      - id: pr-feature-matrix-machine-readable
-        title: "docs(.pads): make feature-matrix machine-readable so planner can pick a fixture family"
-        closes_gap: feature_matrix_unmeasured
-        files:
-          - .pads/rules/feature-matrix.json
-          - .pads/rules/feature-matrix.md
-        evidence_required:
-          - "Each row cites a solc TypeChecker.cpp line or test corpus dir."
-          - "Each row names `current_solar_support` honestly."
-        size: "small (~80-150 lines)"
-      - id: pr-foundry-golden-fixture
-        title: "test(foundry): pin a tiny Foundry fixture and capture its build-info golden"
-        closes_gap: foundry_build_info_capture_missing
-        files:
-          - testdata/foundry-fixtures/minimal/foundry.toml
-          - testdata/foundry-fixtures/minimal/src/Counter.sol
-          - testdata/foundry-fixtures/minimal/build-info.golden.json
-          - tools/foundry-capture/capture.sh
-        evidence_required:
-          - "Pinned solc 0.8.31, evmVersion cancun, optimizer disabled."
-          - "Golden build-info JSON checked in; future replay PRs diff against it."
-        size: "small (~100-180 lines)"
+    # Note (2026-05-18): a `first_pr_candidates` block was intentionally
+    # REMOVED. PADS already deleted `starter_tasks` back on 2026-05-09
+    # because the planner echoed them as the entire kickoff TASK_GRAPH,
+    # collapsing every run into the same green-field scaffolding work.
+    # A fixed list of "first PRs" has the same local-maxima failure mode:
+    # five planners run, five identical PRs queue, none merge cleanly.
+    #
+    # The planner now grounds itself in `known_gaps` + `track_files`
+    # + live workspace/issue/CI state and composes its own task each
+    # run. `track_files` gives it real file paths so it does not
+    # hallucinate. It is grounding, not prescription.
     continuation_rules:
       - "After a measurement artifact lands, choose implementation work from the largest newly measured failing family with owner files and a cheapest oracle."
       - "After a Standard JSON front-door PR lands, advance diagnostics/source identity before artifact-output parity."
