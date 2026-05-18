@@ -43,6 +43,15 @@ proof. It is not a theme, a phase heading, or a formatter-only patch.
 - The patch only adds scaffolding and does not produce a measurement,
   verifier, fixture, or behavior change.
 
+  Note: oracle infrastructure, machine-readable feature matrices,
+  baseline ledgers, build-info golden fixtures, and tester-mode
+  additions are **explicitly acceptable** shipping units because each
+  one unlocks a downstream measurement that the next PR can cite. The
+  rejection target here is *prose-only refactors*, *renamed scripts
+  with no new behavior*, and *changes that produce no artifact a
+  follow-up PR can build on*. When in doubt, the PR body must answer:
+  "what does the next PR get to cite that it could not cite before?"
+
 ### Foundry-readiness rejection criteria
 
 In addition to the rules above, reject Foundry-adjacent PRs when:

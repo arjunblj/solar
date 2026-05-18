@@ -663,7 +663,7 @@ extensions:
       - title: Oracle inventory and baseline ledger
         mode: calibration
         unlocks: "All later measured tasks cite current tool/corpus/support state instead of guessing."
-        proof: "deterministic JSON or markdown report with tool versions, corpus counts, skip/xfail counts, and unavailable oracles"
+        proof: "deterministic JSON or markdown report with tool versions, corpus counts, skip counts, and unavailable oracles"
       - title: Minimal Standard JSON front door
         mode: calibration
         unlocks: "Diagnostics, ABI, metadata, storage layout, and project replay can share the same integration surface."
@@ -676,6 +676,204 @@ extensions:
         mode: calibration
         unlocks: "Framework replay tasks can consume real Standard JSON inputs without claiming runtime support."
         proof: "forge config/remappings/build-info captured from a pinned tiny fixture"
+
+    # Real file paths that exist in this repo today, indexed by the
+    # known_gap id above. The planner MUST cite seed paths from this index
+    # rather than inventing plausible-looking paths. Any task whose evidence
+    # references files outside this index is mis-localized and should be
+    # repaired before dispatch.
+    #
+    # Last verified against fork main 8d26b642 on 2026-05-18.
+    track_files:
+      oracle_inventory_missing:
+        primary_files:
+          - tools/tester/src/lib.rs
+          - tools/tester/src/solc/mod.rs
+          - tools/tester/src/solc/solidity.rs
+          - tools/tester/src/solc/yul.rs
+          - crates/solar/tests.rs
+          - .pads/setup.sh
+          - .pads/rules/oracles.md
+        relevant_dirs:
+          - testdata/solidity/test/libsolidity/syntaxTests/
+          - tests/ui/
+        oracle_commands:
+          - "bash .pads/setup.sh"
+          - "cargo nextest run --workspace"
+          - "TESTER_MODE=solc-solidity cargo nextest run -p solar-compiler --test tests"
+          - "TESTER_MODE=solc-yul cargo nextest run -p solar-compiler --test tests"
+        first_pr_target: "Add a `scripts/pads/baseline-ledger.py` (or `tools/tester/src/bin/baseline.rs`) that runs the oracle stack and emits `.pads-artifacts/baseline.json` with toolchain versions, corpus counts, pass/fail/skip per mode, and elapsed time. Wire it into `.pads/setup.sh` as an optional final step. ~150-300 lines."
+      typeerror_lane_missing:
+        primary_files:
+          - tools/tester/src/lib.rs
+          - tools/tester/src/solc/solidity.rs
+          - tools/tester/src/solc/mod.rs
+          - crates/sema/src/typeck/mod.rs
+          - crates/sema/src/typeck/checker.rs
+          - crates/sema/src/typeck/override_checker.rs
+          - crates/config/src/opts.rs
+        relevant_dirs:
+          - testdata/solidity/test/libsolidity/syntaxTests/nameAndTypeResolution/
+          - testdata/solidity/test/libsolidity/syntaxTests/types/
+          - testdata/solidity/test/libsolidity/syntaxTests/viewPureChecker/
+          - tests/ui/typeck/
+        oracle_commands:
+          - "TESTER_MODE=solc-solidity-typeck cargo nextest run -p solar-compiler --test tests -- nameAndTypeResolution"
+          - "cargo run -- -Ztypeck testdata/solidity/test/libsolidity/syntaxTests/types/inferred_type_int.sol"
+        first_pr_target: |
+          Add `Mode::SolcSolidityTypeck` to `tools/tester/src/lib.rs` (enum
+          variant + parse + `is_solc` + display). When this mode is active,
+          drop the `--stop-after=parsing` flag and pass `-Ztypeck`. Curate
+          an allowlist of corpus subdirs known to be typeck-relevant
+          (start: `nameAndTypeResolution/`, `types/`). Emit per-category
+          pass/fail counts. Pair with one `tests/ui/typeck/` fixture that
+          intentionally fails today so reviewers see the new lane wired
+          end-to-end. ~120-200 lines across `tools/tester/src/lib.rs` and
+          `tools/tester/src/solc/solidity.rs`. Cite upstream #615.
+      standard_json_frontdoor_missing:
+        primary_files:
+          - crates/cli/src/lib.rs
+          - crates/cli/src/args.rs
+          - crates/interface/src/lib.rs
+          - crates/config/src/opts.rs
+          - crates/sema/src/lib.rs
+          - crates/solar/src/lib.rs
+        relevant_dirs:
+          - scripts/
+        oracle_commands:
+          - "cargo run -- --standard-json < scripts/standard_json_template.json"
+          - "solc --standard-json < scripts/standard_json_template.json | jq '.errors'"
+        first_pr_target: |
+          Wire a `--standard-json` flag in `crates/cli/src/args.rs` that
+          parses stdin as Standard JSON (language, sources, settings
+          subset: optimizer/evmVersion/outputSelection). Lift `language`
+          gate (must be `Solidity`). Emit a single `errors[]` array
+          mirroring solc's JSON shape for parse errors. Reject unsupported
+          settings with explicit `errors[]` entries (not silently). Pair
+          with one fixture under `tests/cli/standard_json/` capturing
+          stdin + expected stdout. ~250-400 lines.
+      foundry_build_info_capture_missing:
+        primary_files:
+          - .pads/rules/foundry-readiness.md
+          - tools/tester/src/lib.rs
+        relevant_dirs:
+          - testdata/
+        oracle_commands:
+          - "forge --version"
+          - "forge config --json"
+        first_pr_target: |
+          Add `testdata/foundry-fixtures/minimal/` with a 1-contract Foundry
+          project (Counter.sol style, pinned solc 0.8.31, optimizer off,
+          evmVersion cancun) and a `tools/foundry-capture/` script that
+          runs `forge build --build-info` and saves the resulting build-info
+          JSON as a golden artifact. Infrastructure-only PR with a measurable
+          unlock: subsequent replay PRs cite this golden as input. ~100-200
+          lines + the Foundry fixture.
+      bytecode_equivalence_future:
+        primary_files:
+          - tools/tester/src/lib.rs
+        relevant_dirs:
+          - crates/
+        oracle_commands:
+          - "echo 'gated: requires solar codegen output, which does not exist on main yet'"
+        first_pr_target: |
+          DEFER. No bytecode emission exists on Solar main today. Do not
+          dispatch bytecode-equivalence work until upstream codegen slices
+          land or a measurement-only artifact (schema, comparator skeleton)
+          is justified by an adjacent oracle ledger.
+      feature_matrix_unmeasured:
+        primary_files:
+          - .pads/rules/feature-matrix.md
+        relevant_dirs:
+          - testdata/solidity/test/libsolidity/syntaxTests/
+        oracle_commands:
+          - "ls -1 testdata/solidity/test/libsolidity/syntaxTests/ | sort"
+        first_pr_target: |
+          Convert `.pads/rules/feature-matrix.md` from prose to a
+          machine-readable `.pads/rules/feature-matrix.json` with rows for
+          each high-risk feature family (transient storage, UDVT, custom
+          errors, fixed/ufixed, modifiers, inheritance linearization,
+          inline assembly memory-safe, library linking, immutables, EVM
+          version gating). Each row carries `solc_reference` (TypeChecker.cpp
+          line range), `corpus_path` (which syntaxTests dir), `current_solar_support`
+          (none/parser/sema/codegen), and `next_measurement` (which oracle
+          command would advance it). ~80-150 lines.
+      performance_phase_report_missing:
+        primary_files:
+          - .pads/rules/performance.md
+        relevant_dirs:
+          - benches/
+        oracle_commands:
+          - "ls benches/"
+          - "cargo bench --bench iai -- --output-format=criterion"
+        first_pr_target: |
+          DEFER until at least one frontend correctness oracle (parser or
+          typeck) has a baseline in the oracle inventory ledger. Performance
+          PRs without a correctness gate are rejected per `## Performance
+          Protocol`.
+
+    # Concrete first-wave PR candidates. Each is a complete reviewable
+    # slice with named files, oracle, expected diff size, and the gap it
+    # closes. The planner SHOULD pick one of these (or an equivalent that
+    # closes a listed known_gap) before inventing new work.
+    first_pr_candidates:
+      - id: pr-baseline-ledger
+        title: "tools(tester): emit baseline oracle ledger to .pads-artifacts"
+        closes_gap: oracle_inventory_missing
+        files:
+          - scripts/pads/baseline-ledger.py
+          - .pads/setup.sh
+        evidence_required:
+          - "Sample `.pads-artifacts/baseline.json` checked in for the current fork commit."
+          - "Counts for `Mode::Ui`, `Mode::SolcSolidity`, `Mode::SolcYul` modes today."
+        size: "small (~150-250 lines)"
+      - id: pr-typeck-lane
+        title: "tools(tester): add SolcSolidityTypeck mode and run nameAndTypeResolution under -Ztypeck"
+        closes_gap: typeerror_lane_missing
+        files:
+          - tools/tester/src/lib.rs
+          - tools/tester/src/solc/solidity.rs
+          - tests/ui/typeck/  # one new fixture demonstrating the lane
+        evidence_required:
+          - "Pass/fail counts for `nameAndTypeResolution` under `-Ztypeck` listed in PR body."
+          - "Cite upstream tracker #615."
+          - "Diff includes one new UI fixture proving the lane runs end-to-end."
+        size: "medium (~150-250 lines)"
+      - id: pr-standard-json-frontdoor
+        title: "feat(cli): wire --standard-json stdin parsing for Solidity language with frontend-only subset"
+        closes_gap: standard_json_frontdoor_missing
+        files:
+          - crates/cli/src/args.rs
+          - crates/cli/src/lib.rs
+          - crates/interface/src/lib.rs
+          - tests/cli/standard_json/  # new fixture dir
+        evidence_required:
+          - "Output of `cargo run -- --standard-json < scripts/standard_json_template.json` in PR body."
+          - "Field-by-field diff vs `solc 0.8.31 --standard-json` for `errors[].sourceLocation`, `errors[].errorCode`, `errors[].type`."
+          - "Explicit `unsupportedSettings[]` entry for any setting Solar does not honor."
+        size: "medium-large (~250-400 lines)"
+      - id: pr-feature-matrix-machine-readable
+        title: "docs(.pads): make feature-matrix machine-readable so planner can pick a fixture family"
+        closes_gap: feature_matrix_unmeasured
+        files:
+          - .pads/rules/feature-matrix.json
+          - .pads/rules/feature-matrix.md
+        evidence_required:
+          - "Each row cites a solc TypeChecker.cpp line or test corpus dir."
+          - "Each row names `current_solar_support` honestly."
+        size: "small (~80-150 lines)"
+      - id: pr-foundry-golden-fixture
+        title: "test(foundry): pin a tiny Foundry fixture and capture its build-info golden"
+        closes_gap: foundry_build_info_capture_missing
+        files:
+          - testdata/foundry-fixtures/minimal/foundry.toml
+          - testdata/foundry-fixtures/minimal/src/Counter.sol
+          - testdata/foundry-fixtures/minimal/build-info.golden.json
+          - tools/foundry-capture/capture.sh
+        evidence_required:
+          - "Pinned solc 0.8.31, evmVersion cancun, optimizer disabled."
+          - "Golden build-info JSON checked in; future replay PRs diff against it."
+        size: "small (~100-180 lines)"
     continuation_rules:
       - "After a measurement artifact lands, choose implementation work from the largest newly measured failing family with owner files and a cheapest oracle."
       - "After a Standard JSON front-door PR lands, advance diagnostics/source identity before artifact-output parity."
