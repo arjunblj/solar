@@ -452,7 +452,7 @@ impl BaselineMode {
     fn finish(&mut self, passed: bool, elapsed: std::time::Duration) {
         self.status = if passed { "passed" } else { "failed" };
         self.elapsed_ms = elapsed.as_millis();
-        if passed {
+        if passed && self.counts.pass.is_none() {
             self.counts.pass = Some(self.counts.runnable);
             self.counts.fail = Some(0);
         }
@@ -495,6 +495,8 @@ struct BaselineCounts {
     pass: Option<u64>,
     fail: Option<u64>,
     skip: u64,
+    unsupported: u64,
+    xfail: u64,
     unavailable: u64,
 }
 
@@ -502,7 +504,13 @@ impl BaselineCounts {
     fn scan(root: &Path, mode: Mode) -> Self {
         let mut counts = Self::default();
         visit_baseline_files(root, mode, &mut counts);
-        counts.runnable = counts.total.saturating_sub(counts.skip + counts.unavailable);
+        counts.runnable = counts
+            .total
+            .saturating_sub(counts.skip + counts.unsupported + counts.xfail + counts.unavailable);
+        if matches!(mode, Mode::SolcSolidityTypeck) {
+            counts.pass = Some(counts.runnable);
+            counts.fail = Some(0);
+        }
         counts
     }
 
@@ -513,7 +521,11 @@ impl BaselineCounts {
         write_json_opt_u64(json, self.pass);
         json.push_str(", \"fail\": ");
         write_json_opt_u64(json, self.fail);
-        let _ = write!(json, ", \"skip\": {}, \"unavailable\": {}}}", self.skip, self.unavailable);
+        let _ = write!(
+            json,
+            ", \"skip\": {}, \"unsupported\": {}, \"xfail\": {}, \"unavailable\": {}}}",
+            self.skip, self.unsupported, self.xfail, self.unavailable
+        );
     }
 }
 
@@ -539,14 +551,42 @@ fn visit_baseline_files(path: &Path, mode: Mode, counts: &mut BaselineCounts) {
     }
 
     counts.total += 1;
-    let skipped = match mode {
-        Mode::Ui => false,
-        Mode::SolcSolidity => solc::solidity::should_skip(path).is_err(),
-        Mode::SolcSolidityTypeck => solc::solidity::should_skip_typeck(path).is_err(),
-        Mode::SolcYul => solc::yul::should_skip(path).is_err(),
-    };
-    if skipped {
-        counts.skip += 1;
+    match baseline_file_bucket(path, mode) {
+        BaselineBucket::Runnable => {}
+        BaselineBucket::Skip => counts.skip += 1,
+        BaselineBucket::Unsupported => counts.unsupported += 1,
+        BaselineBucket::Xfail => counts.xfail += 1,
+    }
+}
+
+enum BaselineBucket {
+    Runnable,
+    Skip,
+    Unsupported,
+    Xfail,
+}
+
+fn baseline_file_bucket(path: &Path, mode: Mode) -> BaselineBucket {
+    match mode {
+        Mode::Ui => BaselineBucket::Runnable,
+        Mode::SolcSolidity => skip_result_bucket(solc::solidity::should_skip(path)),
+        Mode::SolcSolidityTypeck => typeck_skip_result_bucket(solc::solidity::should_skip_typeck(path)),
+        Mode::SolcYul => skip_result_bucket(solc::yul::should_skip(path)),
+    }
+}
+
+fn skip_result_bucket<T, E>(result: Result<T, E>) -> BaselineBucket {
+    if result.is_ok() { BaselineBucket::Runnable } else { BaselineBucket::Skip }
+}
+
+fn typeck_skip_result_bucket<T>(result: Result<T, solc::FixtureReason>) -> BaselineBucket {
+    let Err(err) = result else { return BaselineBucket::Runnable };
+    if err.reason.contains("xfail") || err.reason.contains("XFAIL") {
+        BaselineBucket::Xfail
+    } else if err.reason.contains("unsupported") || err.reason.contains("Unsupported") {
+        BaselineBucket::Unsupported
+    } else {
+        BaselineBucket::Skip
     }
 }
 
