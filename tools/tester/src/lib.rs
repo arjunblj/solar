@@ -74,12 +74,11 @@ pub fn run_tests(cmd: &'static Path) -> Result<()> {
         }
 
         if let Err(err) = result {
-            if let Some(baseline) = &baseline {
-                if let Err(write_err) = baseline.write(baseline_started_at.elapsed()) {
+            if let Some(baseline) = &baseline
+                && let Err(write_err) = baseline.write(baseline_started_at.elapsed()) {
                     eprintln!("failed to write baseline ledger: {write_err}");
                 }
-            }
-            return Err(err.into());
+            return Err(err);
         }
     }
 
@@ -514,7 +513,7 @@ impl BaselineCounts {
         json.push_str(", \"fail\": ");
         write_json_opt_u64(json, self.fail);
         let _ =
-            write!(json, ", \"skip\": {}, \"unavailable\": {}{}", self.skip, self.unavailable, "}");
+            write!(json, ", \"skip\": {}, \"unavailable\": {}}}", self.skip, self.unavailable);
     }
 }
 
