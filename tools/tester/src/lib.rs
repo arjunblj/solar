@@ -75,9 +75,10 @@ pub fn run_tests(cmd: &'static Path) -> Result<()> {
 
         if let Err(err) = result {
             if let Some(baseline) = &baseline
-                && let Err(write_err) = baseline.write(baseline_started_at.elapsed()) {
-                    eprintln!("failed to write baseline ledger: {write_err}");
-                }
+                && let Err(write_err) = baseline.write(baseline_started_at.elapsed())
+            {
+                eprintln!("failed to write baseline ledger: {write_err}");
+            }
             return Err(err);
         }
     }
@@ -512,8 +513,7 @@ impl BaselineCounts {
         write_json_opt_u64(json, self.pass);
         json.push_str(", \"fail\": ");
         write_json_opt_u64(json, self.fail);
-        let _ =
-            write!(json, ", \"skip\": {}, \"unavailable\": {}}}", self.skip, self.unavailable);
+        let _ = write!(json, ", \"skip\": {}, \"unavailable\": {}}}", self.skip, self.unavailable);
     }
 }
 
@@ -542,6 +542,7 @@ fn visit_baseline_files(path: &Path, mode: Mode, counts: &mut BaselineCounts) {
     let skipped = match mode {
         Mode::Ui => false,
         Mode::SolcSolidity => solc::solidity::should_skip(path).is_err(),
+        Mode::SolcSolidityTypeck => solc::solidity::should_skip_typeck(path).is_err(),
         Mode::SolcYul => solc::yul::should_skip(path).is_err(),
     };
     if skipped {
