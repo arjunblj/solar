@@ -8,7 +8,10 @@
 use clap::Parser as _;
 use solar_interface::{Result, Session};
 use solar_sema::CompilerRef;
-use std::ops::ControlFlow;
+use std::{
+    io::{self, Read, Write},
+    ops::ControlFlow,
+};
 
 pub use solar_config::{self as config, Opts, UnstableOpts, version};
 
@@ -45,7 +48,135 @@ where
 }
 
 pub fn run_compiler_args(opts: Opts) -> Result {
+    if opts.standard_json {
+        return run_standard_json(opts);
+    }
+
     run_compiler_with(opts, run_default)
+}
+
+fn run_standard_json(opts: Opts) -> Result {
+    let mut input = String::new();
+    let mut stdin = io::stdin();
+    if let Err(error) = stdin.read_to_string(&mut input) {
+        write_standard_json_output(
+            opts.pretty_json,
+            vec![standard_json_error("IOError", format!("failed to read stdin: {error}"))],
+        );
+        return Ok(());
+    }
+
+    let input = match serde_json::from_str::<serde_json::Value>(&input) {
+        Ok(input) => input,
+        Err(error) => {
+            write_standard_json_output(
+                opts.pretty_json,
+                vec![standard_json_error("JSONError", format!("invalid JSON input: {error}"))],
+            );
+            return Ok(());
+        }
+    };
+
+    let errors = validate_standard_json_input(&input);
+    write_standard_json_output(opts.pretty_json, errors);
+    Ok(())
+}
+
+fn validate_standard_json_input(input: &serde_json::Value) -> Vec<serde_json::Value> {
+    let mut errors = Vec::new();
+
+    let Some(input) = input.as_object() else {
+        errors.push(standard_json_error("JSONError", "standard JSON input must be an object"));
+        return errors;
+    };
+
+    match input.get("language") {
+        Some(language) if language == "Solidity" => {}
+        Some(language) if language.is_string() => errors.push(standard_json_error(
+            "JSONError",
+            "unsupported language: only Solidity is currently supported",
+        )),
+        Some(_) => errors.push(standard_json_error("JSONError", "language must be a string")),
+        None => errors.push(standard_json_error("JSONError", "missing required field: language")),
+    }
+
+    match input.get("sources").and_then(serde_json::Value::as_object) {
+        Some(sources) => {
+            for (name, source) in sources {
+                let Some(source) = source.as_object() else {
+                    errors.push(standard_json_error(
+                        "JSONError",
+                        format!("source {name:?} must be an object"),
+                    ));
+                    continue;
+                };
+
+                if source.contains_key("urls") {
+                    errors.push(standard_json_error(
+                        "JSONError",
+                        format!(
+                            "source {name:?} uses unsupported urls; inline content is required"
+                        ),
+                    ));
+                }
+
+                match source.get("content") {
+                    Some(content) if content.is_string() => {}
+                    Some(_) => errors.push(standard_json_error(
+                        "JSONError",
+                        format!("source {name:?} content must be a string"),
+                    )),
+                    None => errors.push(standard_json_error(
+                        "JSONError",
+                        format!("source {name:?} is missing inline content"),
+                    )),
+                }
+            }
+        }
+        None => errors.push(standard_json_error("JSONError", "missing required field: sources")),
+    }
+
+    if let Some(settings) = input.get("settings") {
+        match settings.as_object() {
+            Some(settings) => {
+                for setting in settings.keys() {
+                    errors.push(standard_json_error(
+                        "JSONError",
+                        format!("unsupported settings field: settings.{setting}"),
+                    ));
+                }
+            }
+            None => errors.push(standard_json_error("JSONError", "settings must be an object")),
+        }
+    }
+
+    errors
+}
+
+fn standard_json_error(error_type: &'static str, message: impl Into<String>) -> serde_json::Value {
+    let message = message.into();
+    serde_json::json!({
+        "component": "general",
+        "errorCode": "0",
+        "formattedMessage": message,
+        "message": message,
+        "severity": "error",
+        "type": error_type,
+    })
+}
+
+fn write_standard_json_output(pretty: bool, errors: Vec<serde_json::Value>) {
+    let output = serde_json::json!({ "errors": errors });
+    let stdout = io::stdout();
+    let mut stdout = stdout.lock();
+    let result = if pretty {
+        serde_json::to_writer_pretty(&mut stdout, &output)
+    } else {
+        serde_json::to_writer(&mut stdout, &output)
+    };
+    if result.is_ok() {
+        let _ = writeln!(stdout);
+    }
 }
 
 fn run_default(compiler: &mut CompilerRef<'_>) -> Result {
