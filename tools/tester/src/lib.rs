@@ -255,7 +255,8 @@ fn solc_exit_expectation(src: &str) -> SolcExitExpectation {
 
 fn emit_corpus_accounting(modes: &[Mode]) -> Result<()> {
     let root = repo_root();
-    let mut accounting = CorpusAccounting::new(if modes.len() == 1 { modes[0].to_str() } else { "solc" });
+    let mut accounting =
+        CorpusAccounting::new(if modes.len() == 1 { modes[0].to_str() } else { "solc" });
     for &mode in modes {
         accounting.add_mode(collect_mode_accounting(root, mode));
     }
@@ -276,7 +277,8 @@ fn repo_root() -> &'static Path {
 
 fn collect_mode_accounting(root: &Path, mode: Mode) -> ModeAccounting {
     let root_dir = root.join(mode.corpus_path());
-    let mut accounting = ModeAccounting::new(mode, root_dir.strip_prefix(root).unwrap_or(&root_dir));
+    let mut accounting =
+        ModeAccounting::new(mode, root_dir.strip_prefix(root).unwrap_or(&root_dir));
 
     if !root_dir.exists() {
         accounting.unavailable_prerequisites.push(UnavailablePrerequisite {
@@ -486,7 +488,8 @@ fn push_unavailable_json(out: &mut String, unavailable: &[UnavailablePrerequisit
         if idx != 0 {
             out.push(',');
         }
-        write!(out, "\n{}{{\n{}  \"path\": ", " ".repeat(indent + 2), " ".repeat(indent + 2)).unwrap();
+        write!(out, "\n{}{{\n{}  \"path\": ", " ".repeat(indent + 2), " ".repeat(indent + 2))
+            .unwrap();
         push_json_string(out, &item.path);
         write!(out, ",\n{}  \"reason\": ", " ".repeat(indent + 2)).unwrap();
         push_json_string(out, &item.reason);
