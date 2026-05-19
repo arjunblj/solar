@@ -82,6 +82,9 @@ pub struct Opts {
         arg(help_heading = "Input options", long, value_enum, default_value_t, hide = true)
     )]
     pub language: Language,
+    /// Read compiler input from stdin as Solidity Standard JSON.
+    #[cfg_attr(feature = "clap", arg(help_heading = "Input options", long, hide = true))]
+    pub standard_json: bool,
 
     /// Number of threads to use. Zero specifies the number of logical cores.
     #[cfg_attr(feature = "clap", arg(long, short = 'j', visible_alias = "jobs", default_value_t))]
