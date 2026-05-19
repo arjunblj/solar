@@ -11,8 +11,12 @@ extend-exclude = [
     "**/test/**",
     "**/*_test.*",
     "**/*_tests.*",
-    "crates/parse/src/lexer/unicode_chars.rs", # Weird words.
+    "crates/parse/src/lexer/unicode_chars.rs",
     "dist-workspace.toml",
+    # PADS.md is the harness contract spec; it intentionally uses words
+    # like `mis-localized` that the default typos dictionary flags. The
+    # spec wording is reviewed separately from the Solar codebase.
+    "PADS.md",
 ]
 
 [default.extend-words]
