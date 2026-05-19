@@ -5,7 +5,10 @@
 #![allow(unreachable_pub)]
 
 use eyre::{Result, eyre};
-use std::path::Path;
+use std::{
+    fmt::Write as _,
+    path::{Path, PathBuf},
+};
 use ui_test::{color_eyre::eyre, spanned::Spanned};
 
 mod errors;
@@ -40,22 +43,47 @@ pub fn run_tests(cmd: &'static Path) -> Result<()> {
         modes = std::slice::from_ref(&mode_tmp);
     }
 
+    let baseline_path = std::env::var_os("SOLAR_BASELINE_LEDGER").map(baseline_path);
+    let baseline_started_at = std::time::Instant::now();
+    let mut baseline = baseline_path.map(|path| BaselineLedger::new(path, cmd));
+
     let tmp_dir = tempfile::tempdir()?;
     let tmp_dir = &*Box::leak(tmp_dir.path().to_path_buf().into_boxed_path());
     for &mode in modes {
         let cfg = MyConfig::<'static> { mode, tmp_dir };
         let config = config(cmd, &args, mode);
+        let mut baseline_mode = baseline.as_ref().map(|_| BaselineMode::new(mode, &config));
 
         let text_emitter: Box<dyn ui_test::status_emitter::StatusEmitter> = args.format.into();
         let gha_emitter = ui_test::status_emitter::Gha { name: mode.to_string(), group: true };
         let status_emitter = (text_emitter, gha_emitter);
 
-        ui_test::run_tests_generic(
+        let started_at = std::time::Instant::now();
+        let result = ui_test::run_tests_generic(
             vec![config],
             move |path, config| file_filter(path, config, cfg),
             move |config, contents| per_file_config(config, contents, cfg),
             status_emitter,
-        )?;
+        );
+
+        if let Some(mode) = &mut baseline_mode {
+            mode.finish(result.is_ok(), started_at.elapsed());
+        }
+        if let (Some(baseline), Some(mode)) = (&mut baseline, baseline_mode) {
+            baseline.modes.push(mode);
+        }
+
+        if let Err(err) = result {
+            if let Some(baseline) = &baseline
+                && let Err(write_err) = baseline.write(baseline_started_at.elapsed()) {
+                    eprintln!("failed to write baseline ledger: {write_err}");
+                }
+            return Err(err);
+        }
+    }
+
+    if let Some(baseline) = &baseline {
+        baseline.write(baseline_started_at.elapsed())?;
     }
 
     Ok(())
@@ -290,4 +318,306 @@ impl std::fmt::Display for Mode {
 struct MyConfig<'a> {
     mode: Mode,
     tmp_dir: &'a Path,
+}
+
+struct BaselineLedger {
+    path: PathBuf,
+    process_command: Vec<String>,
+    tester_mode: Option<String>,
+    tools: Vec<BaselineTool>,
+    modes: Vec<BaselineMode>,
+}
+
+impl BaselineLedger {
+    fn new(path: PathBuf, cmd: &Path) -> Self {
+        let solc = std::env::var_os("SOLC")
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("solc"));
+
+        Self {
+            path,
+            process_command: std::env::args_os()
+                .map(|arg| arg.to_string_lossy().into_owned())
+                .collect(),
+            tester_mode: std::env::var("TESTER_MODE").ok(),
+            tools: vec![BaselineTool::new("solar", cmd.into()), BaselineTool::new("solc", solc)],
+            modes: Vec::new(),
+        }
+    }
+
+    fn write(&self, elapsed: std::time::Duration) -> std::io::Result<()> {
+        if let Some(parent) = self.path.parent().filter(|parent| !parent.as_os_str().is_empty()) {
+            std::fs::create_dir_all(parent)?;
+        }
+
+        let mut json = String::new();
+        json.push_str("{\n");
+        json.push_str("  \"schema\": \"solar-baseline-ledger-v1\",\n");
+        json.push_str("  \"command\": ");
+        write_json_strings(&mut json, &self.process_command);
+        json.push_str(",\n");
+        json.push_str("  \"tester_mode\": ");
+        write_json_opt_string(&mut json, self.tester_mode.as_deref());
+        json.push_str(",\n");
+        let _ = writeln!(json, "  \"elapsed_ms\": {},", elapsed.as_millis());
+        json.push_str("  \"tools\": [\n");
+        for (idx, tool) in self.tools.iter().enumerate() {
+            if idx != 0 {
+                json.push_str(",\n");
+            }
+            tool.write_json(&mut json, "    ");
+        }
+        json.push_str("\n  ],\n");
+        json.push_str("  \"modes\": [\n");
+        for (idx, mode) in self.modes.iter().enumerate() {
+            if idx != 0 {
+                json.push_str(",\n");
+            }
+            mode.write_json(&mut json, "    ");
+        }
+        json.push_str("\n  ]\n}\n");
+
+        std::fs::write(&self.path, json)
+    }
+}
+
+struct BaselineTool {
+    name: &'static str,
+    command: String,
+    available: bool,
+    version: Option<String>,
+}
+
+impl BaselineTool {
+    fn new(name: &'static str, command: PathBuf) -> Self {
+        let output = std::process::Command::new(&command).arg("--version").output();
+        let version = output.as_ref().ok().and_then(first_output_line);
+        Self {
+            name,
+            command: display_path(&command),
+            available: command.exists() || output.is_ok(),
+            version,
+        }
+    }
+
+    fn write_json(&self, json: &mut String, indent: &str) {
+        json.push_str(indent);
+        json.push_str("{\n");
+        let field_indent = format!("{indent}  ");
+        json.push_str(&field_indent);
+        json.push_str("\"name\": ");
+        write_json_string(json, self.name);
+        json.push_str(",\n");
+        json.push_str(&field_indent);
+        json.push_str("\"command\": ");
+        write_json_string(json, &self.command);
+        json.push_str(",\n");
+        let _ = writeln!(json, "{field_indent}\"available\": {},", self.available);
+        json.push_str(&field_indent);
+        json.push_str("\"version\": ");
+        write_json_opt_string(json, self.version.as_deref());
+        json.push('\n');
+        json.push_str(indent);
+        json.push('}');
+    }
+}
+
+struct BaselineMode {
+    name: &'static str,
+    corpus_root: String,
+    command: Vec<String>,
+    counts: BaselineCounts,
+    status: &'static str,
+    elapsed_ms: u128,
+}
+
+impl BaselineMode {
+    fn new(mode: Mode, config: &ui_test::Config) -> Self {
+        let mut command = Vec::with_capacity(config.program.args.len() + 1);
+        command.push(display_path(&config.program.program));
+        command.extend(config.program.args.iter().map(|arg| arg.to_string_lossy().into_owned()));
+
+        Self {
+            name: mode.to_str(),
+            corpus_root: display_path(&config.root_dir),
+            command,
+            counts: BaselineCounts::scan(&config.root_dir, mode),
+            status: "not_run",
+            elapsed_ms: 0,
+        }
+    }
+
+    fn finish(&mut self, passed: bool, elapsed: std::time::Duration) {
+        self.status = if passed { "passed" } else { "failed" };
+        self.elapsed_ms = elapsed.as_millis();
+        if passed {
+            self.counts.pass = Some(self.counts.runnable);
+            self.counts.fail = Some(0);
+        }
+    }
+
+    fn write_json(&self, json: &mut String, indent: &str) {
+        json.push_str(indent);
+        json.push_str("{\n");
+        let field_indent = format!("{indent}  ");
+        json.push_str(&field_indent);
+        json.push_str("\"name\": ");
+        write_json_string(json, self.name);
+        json.push_str(",\n");
+        json.push_str(&field_indent);
+        json.push_str("\"corpus_root\": ");
+        write_json_string(json, &self.corpus_root);
+        json.push_str(",\n");
+        json.push_str(&field_indent);
+        json.push_str("\"command\": ");
+        write_json_strings(json, &self.command);
+        json.push_str(",\n");
+        json.push_str(&field_indent);
+        json.push_str("\"status\": ");
+        write_json_string(json, self.status);
+        json.push_str(",\n");
+        let _ = writeln!(json, "{field_indent}\"elapsed_ms\": {},", self.elapsed_ms);
+        json.push_str(&field_indent);
+        json.push_str("\"counts\": ");
+        self.counts.write_json(json);
+        json.push('\n');
+        json.push_str(indent);
+        json.push('}');
+    }
+}
+
+#[derive(Default)]
+struct BaselineCounts {
+    total: u64,
+    runnable: u64,
+    pass: Option<u64>,
+    fail: Option<u64>,
+    skip: u64,
+    unavailable: u64,
+}
+
+impl BaselineCounts {
+    fn scan(root: &Path, mode: Mode) -> Self {
+        let mut counts = Self::default();
+        visit_baseline_files(root, mode, &mut counts);
+        counts.runnable = counts.total.saturating_sub(counts.skip + counts.unavailable);
+        counts
+    }
+
+    fn write_json(&self, json: &mut String) {
+        json.push_str("{\"total\": ");
+        let _ = write!(json, "{}", self.total);
+        json.push_str(", \"pass\": ");
+        write_json_opt_u64(json, self.pass);
+        json.push_str(", \"fail\": ");
+        write_json_opt_u64(json, self.fail);
+        let _ =
+            write!(json, ", \"skip\": {}, \"unavailable\": {}}}", self.skip, self.unavailable);
+    }
+}
+
+fn visit_baseline_files(path: &Path, mode: Mode, counts: &mut BaselineCounts) {
+    let Ok(metadata) = std::fs::metadata(path) else {
+        counts.unavailable += 1;
+        return;
+    };
+    if metadata.is_dir() {
+        let Ok(entries) = std::fs::read_dir(path) else {
+            counts.unavailable += 1;
+            return;
+        };
+        for entry in entries.flatten() {
+            visit_baseline_files(&entry.path(), mode, counts);
+        }
+        return;
+    }
+
+    let Some(ext) = path.extension() else { return };
+    if ext != "sol" && !(mode.allows_yul() && ext == "yul") {
+        return;
+    }
+
+    counts.total += 1;
+    let skipped = match mode {
+        Mode::Ui => false,
+        Mode::SolcSolidity => solc::solidity::should_skip(path).is_err(),
+        Mode::SolcYul => solc::yul::should_skip(path).is_err(),
+    };
+    if skipped {
+        counts.skip += 1;
+    }
+}
+
+fn first_output_line(output: &std::process::Output) -> Option<String> {
+    let bytes = if output.stdout.is_empty() { &output.stderr } else { &output.stdout };
+    String::from_utf8_lossy(bytes)
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn display_path(path: &Path) -> String {
+    path.to_string_lossy().into_owned()
+}
+
+fn baseline_path(path: std::ffi::OsString) -> PathBuf {
+    let path = PathBuf::from(path);
+    if path.is_absolute() {
+        return path;
+    }
+
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    for ancestor in cwd.ancestors() {
+        if ancestor.join("PADS.md").is_file() && ancestor.join("Cargo.toml").is_file() {
+            return ancestor.join(path);
+        }
+    }
+    cwd.join(path)
+}
+
+fn write_json_opt_u64(json: &mut String, value: Option<u64>) {
+    if let Some(value) = value {
+        let _ = write!(json, "{value}");
+    } else {
+        json.push_str("null");
+    }
+}
+
+fn write_json_opt_string(json: &mut String, value: Option<&str>) {
+    if let Some(value) = value {
+        write_json_string(json, value);
+    } else {
+        json.push_str("null");
+    }
+}
+
+fn write_json_strings(json: &mut String, values: &[String]) {
+    json.push('[');
+    for (idx, value) in values.iter().enumerate() {
+        if idx != 0 {
+            json.push_str(", ");
+        }
+        write_json_string(json, value);
+    }
+    json.push(']');
+}
+
+fn write_json_string(json: &mut String, value: &str) {
+    json.push('"');
+    for ch in value.chars() {
+        match ch {
+            '"' => json.push_str("\\\""),
+            '\\' => json.push_str("\\\\"),
+            '\n' => json.push_str("\\n"),
+            '\r' => json.push_str("\\r"),
+            '\t' => json.push_str("\\t"),
+            ch if ch.is_control() => {
+                let _ = write!(json, "\\u{:04x}", ch as u32);
+            }
+            ch => json.push(ch),
+        }
+    }
+    json.push('"');
 }
