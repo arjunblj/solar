@@ -356,9 +356,9 @@ impl<'gcx> Gcx<'gcx> {
         self.mk_ty_iter(ids.iter().map(|&id| self.type_of_item(id.into())))
     }
 
-    pub fn mk_ty_string_literal(self, s: &[u8]) -> Ty<'gcx> {
+    pub fn mk_ty_string_literal(self, is_string: bool, s: &[u8]) -> Ty<'gcx> {
         self.mk_ty(TyKind::StringLiteral(
-            std::str::from_utf8(s).is_ok(),
+            is_string,
             TypeSize::new_int_bits(s.len().min(32) as u16 * 8),
         ))
     }
@@ -655,7 +655,10 @@ impl<'gcx> Gcx<'gcx> {
     /// Returns the type of the given literal.
     pub fn type_of_lit(self, lit: &'gcx hir::Lit<'gcx>) -> Ty<'gcx> {
         match &lit.kind {
-            solar_ast::LitKind::Str(_, s, _) => self.mk_ty_string_literal(s.as_byte_str()),
+            solar_ast::LitKind::Str(kind, s, _) => self.mk_ty_string_literal(
+                matches!(kind, solar_ast::StrKind::Str | solar_ast::StrKind::Unicode),
+                s.as_byte_str(),
+            ),
             solar_ast::LitKind::Number(int) => {
                 let compatible_fixed_bytes = compatible_fixed_bytes_type(lit);
                 self.mk_ty_int_literal_with_fixed_bytes(

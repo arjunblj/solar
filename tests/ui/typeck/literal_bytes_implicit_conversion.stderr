@@ -8,7 +8,7 @@ error: mismatched types
    ╭▸ ROOT/tests/ui/typeck/literal_bytes_implicit_conversion.sol:LL:CC
    │
 LL │         bytes2 invalid_h2 = hex"123456";
-   ╰╴                            ━━━━━━━━━━━ literal `utf8_string_literal[3]` is larger than the type `bytes2`
+   ╰╴                            ━━━━━━━━━━━ literal `bytes_string_literal[3]` is larger than the type `bytes2`
 
 error: mismatched types
    ╭▸ ROOT/tests/ui/typeck/literal_bytes_implicit_conversion.sol:LL:CC
