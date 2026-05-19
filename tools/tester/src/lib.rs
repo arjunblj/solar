@@ -4,8 +4,13 @@
 
 #![allow(unreachable_pub)]
 
-use eyre::{Result, eyre};
-use std::path::Path;
+use eyre::{Context, Result, eyre};
+use std::{
+    fs,
+    io::Write,
+    path::{Path, PathBuf},
+    time::Instant,
+};
 use ui_test::{color_eyre::eyre, spanned::Spanned};
 
 mod errors;
@@ -40,35 +45,68 @@ pub fn run_tests(cmd: &'static Path) -> Result<()> {
         modes = std::slice::from_ref(&mode_tmp);
     }
 
+    let ledger_path = std::env::var_os("SOLAR_BASELINE_LEDGER").map(|path| {
+        let path = PathBuf::from(path);
+        if path.is_absolute() { path } else { workspace_root().join(path) }
+    });
+    let started_at = Instant::now();
+    let mut ledger = ledger_path.as_ref().map(|_| BaselineLedger::new());
+
     let tmp_dir = tempfile::tempdir()?;
     let tmp_dir = &*Box::leak(tmp_dir.path().to_path_buf().into_boxed_path());
+    let mut result = Ok(());
     for &mode in modes {
         let cfg = MyConfig::<'static> { mode, tmp_dir };
         let config = config(cmd, &args, mode);
+
+        let mode_started_at = Instant::now();
+        let counts = ledger.as_ref().map(|_| count_corpus(&config, cfg));
 
         let text_emitter: Box<dyn ui_test::status_emitter::StatusEmitter> = args.format.into();
         let gha_emitter = ui_test::status_emitter::Gha { name: mode.to_string(), group: true };
         let status_emitter = (text_emitter, gha_emitter);
 
-        ui_test::run_tests_generic(
+        let mode_result = ui_test::run_tests_generic(
             vec![config],
             move |path, config| file_filter(path, config, cfg),
             move |config, contents| per_file_config(config, contents, cfg),
             status_emitter,
-        )?;
+        );
+
+        if let Some(ledger) = &mut ledger {
+            let mut counts = counts.expect("ledger counts should exist when ledger is enabled");
+            if mode_result.is_err() {
+                counts.failed = 1;
+                counts.passed = counts.passed.saturating_sub(1);
+            }
+            ledger.oracles.push(BaselineOracle {
+                name: mode.to_string(),
+                corpus_root: mode.corpus_root().into(),
+                counts,
+                elapsed_ms: mode_started_at.elapsed().as_millis(),
+            });
+        }
+
+        if mode_result.is_err() {
+            result = mode_result;
+            break;
+        }
     }
 
-    Ok(())
+    if let (Some(path), Some(mut ledger)) = (ledger_path, ledger) {
+        ledger.elapsed_ms = started_at.elapsed().as_millis();
+        ledger
+            .write(&path)
+            .wrap_err_with(|| format!("failed to write baseline ledger to {}", path.display()))?;
+    }
+
+    result
 }
 
 fn config(cmd: &'static Path, args: &ui_test::Args, mode: Mode) -> ui_test::Config {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap();
+    let root = workspace_root();
 
-    let path = match mode {
-        Mode::Ui => "tests/ui/",
-        Mode::SolcSolidity => "testdata/solidity/test/",
-        Mode::SolcYul => "testdata/solidity/test/libyul/",
-    };
+    let path = mode.corpus_root();
     let tests_root = root.join(path);
     assert!(
         tests_root.exists(),
@@ -164,6 +202,10 @@ fn config(cmd: &'static Path, args: &ui_test::Args, mode: Mode) -> ui_test::Conf
     config
 }
 
+fn workspace_root() -> &'static Path {
+    Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap()
+}
+
 fn get_host() -> &'static str {
     static CACHE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     CACHE.get_or_init(|| {
@@ -185,6 +227,37 @@ fn file_filter(path: &Path, config: &ui_test::Config, cfg: MyConfig<'_>) -> Opti
         Mode::SolcYul => solc::yul::should_skip(path).is_err(),
     };
     Some(!skip)
+}
+
+fn count_corpus(config: &ui_test::Config, cfg: MyConfig<'_>) -> BaselineCounts {
+    let mut counts = BaselineCounts::default();
+    count_corpus_dir(&config.root_dir, config, cfg, &mut counts);
+    counts.passed = counts.total.saturating_sub(counts.skipped);
+    counts
+}
+
+fn count_corpus_dir(
+    dir: &Path,
+    config: &ui_test::Config,
+    cfg: MyConfig<'_>,
+    counts: &mut BaselineCounts,
+) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            count_corpus_dir(&path, config, cfg, counts);
+        } else if let Some(include) = file_filter(&path, config, cfg) {
+            counts.total += 1;
+            if include {
+                counts.runnable += 1;
+            } else {
+                counts.skipped += 1;
+            }
+        }
+    }
 }
 
 fn per_file_config(config: &mut ui_test::Config, file: &Spanned<Vec<u8>>, cfg: MyConfig<'_>) {
@@ -261,6 +334,14 @@ impl Mode {
         }
     }
 
+    fn corpus_root(self) -> &'static str {
+        match self {
+            Self::Ui => "tests/ui/",
+            Self::SolcSolidity => "testdata/solidity/test/",
+            Self::SolcYul => "testdata/solidity/test/libyul/",
+        }
+    }
+
     fn is_solc(self) -> bool {
         matches!(self, Self::SolcSolidity | Self::SolcYul)
     }
@@ -280,4 +361,86 @@ impl std::fmt::Display for Mode {
 struct MyConfig<'a> {
     mode: Mode,
     tmp_dir: &'a Path,
+}
+
+struct BaselineLedger {
+    elapsed_ms: u128,
+    oracles: Vec<BaselineOracle>,
+}
+
+impl BaselineLedger {
+    fn new() -> Self {
+        Self { elapsed_ms: 0, oracles: Vec::new() }
+    }
+
+    fn write(&self, path: &Path) -> Result<()> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let mut file = fs::File::create(path)?;
+        writeln!(file, "{{")?;
+        writeln!(file, "  \"schema\": \"solar-baseline-ledger-v1\",")?;
+        writeln!(file, "  \"tool\": {{")?;
+        writeln!(file, "    \"name\": \"solar\",")?;
+        writeln!(file, "    \"version\": \"{}\"", json_escape(env!("CARGO_PKG_VERSION")))?;
+        writeln!(file, "  }},")?;
+        writeln!(file, "  \"elapsed_ms\": {},", self.elapsed_ms)?;
+        writeln!(file, "  \"oracles\": [")?;
+        for (idx, oracle) in self.oracles.iter().enumerate() {
+            oracle.write(&mut file, idx + 1 == self.oracles.len())?;
+        }
+        writeln!(file, "  ]")?;
+        writeln!(file, "}}")?;
+        Ok(())
+    }
+}
+
+struct BaselineOracle {
+    name: String,
+    corpus_root: String,
+    counts: BaselineCounts,
+    elapsed_ms: u128,
+}
+
+impl BaselineOracle {
+    fn write(&self, file: &mut fs::File, last: bool) -> Result<()> {
+        writeln!(file, "    {{")?;
+        writeln!(file, "      \"name\": \"{}\",", json_escape(&self.name))?;
+        writeln!(file, "      \"corpus_root\": \"{}\",", json_escape(&self.corpus_root))?;
+        writeln!(file, "      \"counts\": {{")?;
+        writeln!(file, "        \"corpus\": {},", self.counts.total)?;
+        writeln!(file, "        \"runnable\": {},", self.counts.runnable)?;
+        writeln!(file, "        \"passed\": {},", self.counts.passed)?;
+        writeln!(file, "        \"failed\": {},", self.counts.failed)?;
+        writeln!(file, "        \"skipped\": {}", self.counts.skipped)?;
+        writeln!(file, "      }},")?;
+        writeln!(file, "      \"elapsed_ms\": {}", self.elapsed_ms)?;
+        writeln!(file, "    }}{}", if last { "" } else { "," })?;
+        Ok(())
+    }
+}
+
+#[derive(Default)]
+struct BaselineCounts {
+    total: u64,
+    runnable: u64,
+    passed: u64,
+    failed: u64,
+    skipped: u64,
+}
+
+fn json_escape(s: &str) -> String {
+    let mut escaped = String::with_capacity(s.len());
+    for ch in s.chars() {
+        match ch {
+            '"' => escaped.push_str("\\\""),
+            '\\' => escaped.push_str("\\\\"),
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            '\t' => escaped.push_str("\\t"),
+            c if c.is_control() => escaped.push_str(&format!("\\u{:04x}", c as u32)),
+            c => escaped.push(c),
+        }
+    }
+    escaped
 }
