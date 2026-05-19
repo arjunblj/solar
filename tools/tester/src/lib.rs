@@ -44,7 +44,7 @@ pub fn run_tests(cmd: &'static Path) -> Result<()> {
     let tmp_dir = &*Box::leak(tmp_dir.path().to_path_buf().into_boxed_path());
     for &mode in modes {
         let cfg = MyConfig::<'static> { mode, tmp_dir };
-        let config = config(cmd, &args, mode);
+        let config = config(cmd, &args, mode)?;
 
         let text_emitter: Box<dyn ui_test::status_emitter::StatusEmitter> = args.format.into();
         let gha_emitter = ui_test::status_emitter::Gha { name: mode.to_string(), group: true };
@@ -61,20 +61,21 @@ pub fn run_tests(cmd: &'static Path) -> Result<()> {
     Ok(())
 }
 
-fn config(cmd: &'static Path, args: &ui_test::Args, mode: Mode) -> ui_test::Config {
+fn config(cmd: &'static Path, args: &ui_test::Args, mode: Mode) -> Result<ui_test::Config> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap();
 
     let path = match mode {
         Mode::Ui => "tests/ui/",
-        Mode::SolcSolidity => "testdata/solidity/test/",
+        Mode::SolcSolidity | Mode::SolcSolidityTypeck => "testdata/solidity/test/",
         Mode::SolcYul => "testdata/solidity/test/libyul/",
     };
     let tests_root = root.join(path);
-    assert!(
-        tests_root.exists(),
-        "tests root directory does not exist: {path};\n\
-         you may need to initialize submodules: `git submodule update --init --checkout`"
-    );
+    if !tests_root.exists() {
+        return Err(eyre!(
+            "tests root directory does not exist: {path};\n\
+             you may need to initialize submodules: `git submodule update --init --checkout`"
+        ));
+    }
 
     let mut config = ui_test::Config {
         // `host` and `target` are used for `//@ignore-...` comments.
@@ -86,8 +87,10 @@ fn config(cmd: &'static Path, args: &ui_test::Args, mode: Mode) -> ui_test::Conf
             args: {
                 let mut args =
                     vec!["-j1", "--error-format=rustc-json", "-Zui-testing", "-Zparse-yul"];
-                if mode.is_solc() {
-                    args.push("--stop-after=parsing");
+                match mode {
+                    Mode::SolcSolidity | Mode::SolcYul => args.push("--stop-after=parsing"),
+                    Mode::SolcSolidityTypeck => args.push("-Ztypeck"),
+                    Mode::Ui => {}
                 }
                 args.into_iter().map(Into::into).collect()
             },
@@ -161,7 +164,7 @@ fn config(cmd: &'static Path, args: &ui_test::Args, mode: Mode) -> ui_test::Conf
         config.comment_defaults.base().require_annotations = Spanned::dummy(false).into();
     }
 
-    config
+    Ok(config)
 }
 
 fn get_host() -> &'static str {
@@ -181,7 +184,9 @@ fn file_filter(path: &Path, config: &ui_test::Config, cfg: MyConfig<'_>) -> Opti
     }
     let skip = match cfg.mode {
         Mode::Ui => false,
-        Mode::SolcSolidity => solc::solidity::should_skip(path).is_err(),
+        Mode::SolcSolidity | Mode::SolcSolidityTypeck => {
+            solc::solidity::should_skip(path).is_err()
+        }
         Mode::SolcYul => solc::yul::should_skip(path).is_err(),
     };
     Some(!skip)
@@ -213,18 +218,19 @@ fn solc_per_file_config(config: &mut ui_test::Config, src: &str, path: &Path, cf
     let expected_errors = errors::Error::load_solc(src);
     let expected_error = expected_errors.iter().find(|e| e.is_error());
     let code = if let Some(expected_error) = expected_error {
-        // Expect failure only for parser errors, otherwise ignore exit code.
-        if expected_error.solc_kind.is_some_and(|kind| kind.is_parser_error()) {
-            Some(1)
-        } else {
-            None
+        match cfg.mode {
+            // The typeck corpus mode uses solc's expected semantic errors as the oracle.
+            Mode::SolcSolidityTypeck => Some(1),
+            // The parser corpus mode only has a parser oracle, so ignore later semantic failures.
+            _ if expected_error.solc_kind.is_some_and(|kind| kind.is_parser_error()) => Some(1),
+            _ => None,
         }
     } else {
         Some(0)
     };
     config.comment_defaults.base().exit_status = code.map(Spanned::dummy).into();
 
-    if matches!(cfg.mode, Mode::SolcSolidity) {
+    if matches!(cfg.mode, Mode::SolcSolidity | Mode::SolcSolidityTypeck) {
         let flags = &mut config.comment_defaults.base().compile_flags;
         let has_delimiters = solc::solidity::handle_delimiters(src, path, cfg.tmp_dir, |arg| {
             flags.push(arg.into_string().unwrap())
@@ -240,6 +246,7 @@ fn solc_per_file_config(config: &mut ui_test::Config, src: &str, path: &Path, cf
 enum Mode {
     Ui,
     SolcSolidity,
+    SolcSolidityTypeck,
     SolcYul,
 }
 
@@ -248,6 +255,7 @@ impl Mode {
         Some(match s {
             "ui" => Self::Ui,
             "solc-solidity" => Self::SolcSolidity,
+            "solc-solidity-typeck" => Self::SolcSolidityTypeck,
             "solc-yul" => Self::SolcYul,
             _ => return None,
         })
@@ -257,16 +265,17 @@ impl Mode {
         match self {
             Self::Ui => "ui",
             Self::SolcSolidity => "solc-solidity",
+            Self::SolcSolidityTypeck => "solc-solidity-typeck",
             Self::SolcYul => "solc-yul",
         }
     }
 
     fn is_solc(self) -> bool {
-        matches!(self, Self::SolcSolidity | Self::SolcYul)
+        matches!(self, Self::SolcSolidity | Self::SolcSolidityTypeck | Self::SolcYul)
     }
 
     fn allows_yul(self) -> bool {
-        !matches!(self, Self::SolcSolidity)
+        !matches!(self, Self::SolcSolidity | Self::SolcSolidityTypeck)
     }
 }
 
