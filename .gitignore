@@ -4,4 +4,5 @@
 /*.sol
 /*.yul
 /tmp
+.pads-artifacts/baseline.json
 .DS_Store
