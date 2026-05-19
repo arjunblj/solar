@@ -335,32 +335,35 @@ struct DiagnosticCode {
 
 // Solc JSON format.
 
-#[derive(Serialize)]
+/// A Solidity Standard JSON diagnostic entry.
+///
+/// This is the shape used for entries in a Standard JSON output `errors` array.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct SolcDiagnostic {
-    source_location: Option<SourceLocation>,
-    secondary_source_locations: Vec<SourceLocation>,
+pub struct SolcDiagnostic {
+    pub source_location: Option<SourceLocation>,
+    pub secondary_source_locations: Vec<SourceLocation>,
     r#type: String,
-    component: String,
-    severity: Severity,
-    error_code: Option<String>,
-    message: String,
-    formatted_message: Option<String>,
+    pub component: String,
+    pub severity: Severity,
+    pub error_code: Option<String>,
+    pub message: String,
+    pub formatted_message: Option<String>,
 }
 
-#[derive(Serialize)]
-struct SourceLocation {
-    file: String,
-    start: u32,
-    end: u32,
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct SourceLocation {
+    pub file: String,
+    pub start: u32,
+    pub end: u32,
     // Some if it's a secondary source location.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    message: Option<String>,
+    pub message: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
-enum Severity {
+pub enum Severity {
     Error,
     Warning,
     Info,
