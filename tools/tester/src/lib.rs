@@ -4,8 +4,8 @@
 
 #![allow(unreachable_pub)]
 
-use eyre::{Result, eyre};
-use std::path::Path;
+use eyre::{Context, Result, eyre};
+use std::{collections::BTreeMap, fmt::Write as _, fs, path::Path};
 use ui_test::{color_eyre::eyre, spanned::Spanned};
 
 mod errors;
@@ -40,6 +40,11 @@ pub fn run_tests(cmd: &'static Path) -> Result<()> {
         modes = std::slice::from_ref(&mode_tmp);
     }
 
+    let accounting_modes = modes.iter().copied().filter(|mode| mode.is_solc()).collect::<Vec<_>>();
+    if !accounting_modes.is_empty() {
+        emit_corpus_accounting(&accounting_modes)?;
+    }
+
     let tmp_dir = tempfile::tempdir()?;
     let tmp_dir = &*Box::leak(tmp_dir.path().to_path_buf().into_boxed_path());
     for &mode in modes {
@@ -62,13 +67,9 @@ pub fn run_tests(cmd: &'static Path) -> Result<()> {
 }
 
 fn config(cmd: &'static Path, args: &ui_test::Args, mode: Mode) -> ui_test::Config {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap();
+    let root = repo_root();
 
-    let path = match mode {
-        Mode::Ui => "tests/ui/",
-        Mode::SolcSolidity => "testdata/solidity/test/",
-        Mode::SolcYul => "testdata/solidity/test/libyul/",
-    };
+    let path = mode.corpus_path();
     let tests_root = root.join(path);
     assert!(
         tests_root.exists(),
@@ -210,17 +211,10 @@ fn per_file_config(config: &mut ui_test::Config, file: &Spanned<Vec<u8>>, cfg: M
 // For solc tests, we can't expect errors normally since we have different diagnostics.
 // Instead, we check just the error code and ignore other output.
 fn solc_per_file_config(config: &mut ui_test::Config, src: &str, path: &Path, cfg: MyConfig<'_>) {
-    let expected_errors = errors::Error::load_solc(src);
-    let expected_error = expected_errors.iter().find(|e| e.is_error());
-    let code = if let Some(expected_error) = expected_error {
-        // Expect failure only for parser errors, otherwise ignore exit code.
-        if expected_error.solc_kind.is_some_and(|kind| kind.is_parser_error()) {
-            Some(1)
-        } else {
-            None
-        }
-    } else {
-        Some(0)
+    let code = match solc_exit_expectation(src) {
+        SolcExitExpectation::Pass => Some(0),
+        SolcExitExpectation::Fail => Some(1),
+        SolcExitExpectation::Ignored => None,
     };
     config.comment_defaults.base().exit_status = code.map(Spanned::dummy).into();
 
@@ -234,6 +228,290 @@ fn solc_per_file_config(config: &mut ui_test::Config, src: &str, path: &Path, cf
             config.program.input_file_flag = Some("-I".into());
         }
     }
+}
+
+#[derive(Clone, Copy)]
+enum SolcExitExpectation {
+    Pass,
+    Fail,
+    Ignored,
+}
+
+fn solc_exit_expectation(src: &str) -> SolcExitExpectation {
+    let expected_errors = errors::Error::load_solc(src);
+    let expected_error = expected_errors.iter().find(|e| e.is_error());
+    if let Some(expected_error) = expected_error {
+        // Expect failure only for parser errors. Other solc errors are not parser-corpus passes:
+        // ui_test ignores their process status, and corpus accounting reports them separately.
+        if expected_error.solc_kind.is_some_and(|kind| kind.is_parser_error()) {
+            SolcExitExpectation::Fail
+        } else {
+            SolcExitExpectation::Ignored
+        }
+    } else {
+        SolcExitExpectation::Pass
+    }
+}
+
+fn emit_corpus_accounting(modes: &[Mode]) -> Result<()> {
+    let root = repo_root();
+    let mut accounting = CorpusAccounting::new(if modes.len() == 1 { modes[0].to_str() } else { "solc" });
+    for &mode in modes {
+        accounting.add_mode(collect_mode_accounting(root, mode));
+    }
+
+    let path = root.join(".pads-artifacts/tester-accounting.json");
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create {}", parent.display()))?;
+    }
+    fs::write(&path, accounting.to_json())
+        .with_context(|| format!("failed to write {}", path.display()))?;
+    Ok(())
+}
+
+fn repo_root() -> &'static Path {
+    Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap()
+}
+
+fn collect_mode_accounting(root: &Path, mode: Mode) -> ModeAccounting {
+    let root_dir = root.join(mode.corpus_path());
+    let mut accounting = ModeAccounting::new(mode, root_dir.strip_prefix(root).unwrap_or(&root_dir));
+
+    if !root_dir.exists() {
+        accounting.unavailable_prerequisites.push(UnavailablePrerequisite {
+            path: accounting.root.clone(),
+            reason: "corpus root does not exist; initialize submodules with `git submodule update --init --checkout`".into(),
+        });
+        return accounting;
+    }
+
+    let mut dirs = vec![root_dir];
+    while let Some(dir) = dirs.pop() {
+        let entries = match fs::read_dir(&dir) {
+            Ok(entries) => entries,
+            Err(err) => {
+                accounting.unavailable_prerequisites.push(UnavailablePrerequisite {
+                    path: relative_path(root, &dir),
+                    reason: format!("failed to read directory: {err}"),
+                });
+                continue;
+            }
+        };
+
+        for entry in entries {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(err) => {
+                    accounting.unavailable_prerequisites.push(UnavailablePrerequisite {
+                        path: relative_path(root, &dir),
+                        reason: format!("failed to read directory entry: {err}"),
+                    });
+                    continue;
+                }
+            };
+            let path = entry.path();
+            let file_type = match entry.file_type() {
+                Ok(file_type) => file_type,
+                Err(err) => {
+                    accounting.unavailable_prerequisites.push(UnavailablePrerequisite {
+                        path: relative_path(root, &path),
+                        reason: format!("failed to read file type: {err}"),
+                    });
+                    continue;
+                }
+            };
+            if file_type.is_dir() {
+                dirs.push(path);
+                continue;
+            }
+            if !file_type.is_file() || !mode.is_candidate_file(&path) {
+                continue;
+            }
+
+            accounting.discovered_files += 1;
+            if let Some(reason) = mode.skip_reason(&path) {
+                accounting.skipped_files += 1;
+                *accounting.skipped_reasons.entry(reason).or_default() += 1;
+                continue;
+            }
+
+            accounting.runnable_files += 1;
+            let src = match fs::read_to_string(&path) {
+                Ok(src) => src,
+                Err(err) => {
+                    accounting.unavailable_prerequisites.push(UnavailablePrerequisite {
+                        path: relative_path(root, &path),
+                        reason: format!("failed to read source: {err}"),
+                    });
+                    continue;
+                }
+            };
+            match solc_exit_expectation(&src) {
+                SolcExitExpectation::Pass => accounting.expected_passes += 1,
+                SolcExitExpectation::Fail => accounting.expected_failures += 1,
+                SolcExitExpectation::Ignored => accounting.ignored_exit_files += 1,
+            }
+        }
+    }
+
+    accounting
+}
+
+fn relative_path(root: &Path, path: &Path) -> String {
+    path.strip_prefix(root).unwrap_or(path).display().to_string()
+}
+
+#[derive(Default)]
+struct CorpusAccounting {
+    mode: &'static str,
+    discovered_files: usize,
+    runnable_files: usize,
+    skipped_files: usize,
+    expected_passes: usize,
+    expected_failures: usize,
+    ignored_exit_files: usize,
+    unavailable_prerequisites: Vec<UnavailablePrerequisite>,
+    modes: Vec<ModeAccounting>,
+}
+
+impl CorpusAccounting {
+    fn new(mode: &'static str) -> Self {
+        Self { mode, ..Self::default() }
+    }
+
+    fn add_mode(&mut self, mode: ModeAccounting) {
+        self.discovered_files += mode.discovered_files;
+        self.runnable_files += mode.runnable_files;
+        self.skipped_files += mode.skipped_files;
+        self.expected_passes += mode.expected_passes;
+        self.expected_failures += mode.expected_failures;
+        self.ignored_exit_files += mode.ignored_exit_files;
+        self.unavailable_prerequisites.extend(mode.unavailable_prerequisites.iter().cloned());
+        self.modes.push(mode);
+    }
+
+    fn to_json(&self) -> String {
+        let mut out = String::new();
+        out.push_str("{\n  \"mode\": ");
+        push_json_string(&mut out, self.mode);
+        write!(out, ",\n  \"discovered_files\": {}", self.discovered_files).unwrap();
+        write!(out, ",\n  \"runnable_files\": {}", self.runnable_files).unwrap();
+        write!(out, ",\n  \"skipped_files\": {}", self.skipped_files).unwrap();
+        write!(out, ",\n  \"expected_passes\": {}", self.expected_passes).unwrap();
+        write!(out, ",\n  \"expected_failures\": {}", self.expected_failures).unwrap();
+        write!(out, ",\n  \"ignored_exit_files\": {}", self.ignored_exit_files).unwrap();
+        out.push_str(",\n  \"unavailable_prerequisites\": ");
+        push_unavailable_json(&mut out, &self.unavailable_prerequisites, 2);
+        out.push_str(",\n  \"modes\": [");
+        for (idx, mode) in self.modes.iter().enumerate() {
+            if idx != 0 {
+                out.push(',');
+            }
+            mode.push_json(&mut out);
+        }
+        out.push_str("\n  ]\n}\n");
+        out
+    }
+}
+
+struct ModeAccounting {
+    mode: &'static str,
+    root: String,
+    discovered_files: usize,
+    runnable_files: usize,
+    skipped_files: usize,
+    expected_passes: usize,
+    expected_failures: usize,
+    ignored_exit_files: usize,
+    skipped_reasons: BTreeMap<&'static str, usize>,
+    unavailable_prerequisites: Vec<UnavailablePrerequisite>,
+}
+
+impl ModeAccounting {
+    fn new(mode: Mode, root: &Path) -> Self {
+        Self {
+            mode: mode.to_str(),
+            root: root.display().to_string(),
+            discovered_files: 0,
+            runnable_files: 0,
+            skipped_files: 0,
+            expected_passes: 0,
+            expected_failures: 0,
+            ignored_exit_files: 0,
+            skipped_reasons: BTreeMap::new(),
+            unavailable_prerequisites: Vec::new(),
+        }
+    }
+
+    fn push_json(&self, out: &mut String) {
+        out.push_str("\n    {\n      \"mode\": ");
+        push_json_string(out, self.mode);
+        out.push_str(",\n      \"root\": ");
+        push_json_string(out, &self.root);
+        write!(out, ",\n      \"discovered_files\": {}", self.discovered_files).unwrap();
+        write!(out, ",\n      \"runnable_files\": {}", self.runnable_files).unwrap();
+        write!(out, ",\n      \"skipped_files\": {}", self.skipped_files).unwrap();
+        write!(out, ",\n      \"expected_passes\": {}", self.expected_passes).unwrap();
+        write!(out, ",\n      \"expected_failures\": {}", self.expected_failures).unwrap();
+        write!(out, ",\n      \"ignored_exit_files\": {}", self.ignored_exit_files).unwrap();
+        out.push_str(",\n      \"skipped_reasons\": {");
+        for (idx, (reason, count)) in self.skipped_reasons.iter().enumerate() {
+            if idx != 0 {
+                out.push(',');
+            }
+            out.push_str("\n        ");
+            push_json_string(out, reason);
+            write!(out, ": {count}").unwrap();
+        }
+        if !self.skipped_reasons.is_empty() {
+            out.push_str("\n      ");
+        }
+        out.push('}');
+        out.push_str(",\n      \"unavailable_prerequisites\": ");
+        push_unavailable_json(out, &self.unavailable_prerequisites, 6);
+        out.push_str("\n    }");
+    }
+}
+
+#[derive(Clone)]
+struct UnavailablePrerequisite {
+    path: String,
+    reason: String,
+}
+
+fn push_unavailable_json(out: &mut String, unavailable: &[UnavailablePrerequisite], indent: usize) {
+    out.push('[');
+    for (idx, item) in unavailable.iter().enumerate() {
+        if idx != 0 {
+            out.push(',');
+        }
+        write!(out, "\n{}{{\n{}  \"path\": ", " ".repeat(indent + 2), " ".repeat(indent + 2)).unwrap();
+        push_json_string(out, &item.path);
+        write!(out, ",\n{}  \"reason\": ", " ".repeat(indent + 2)).unwrap();
+        push_json_string(out, &item.reason);
+        write!(out, "\n{} }}", " ".repeat(indent + 2)).unwrap();
+    }
+    if !unavailable.is_empty() {
+        write!(out, "\n{}", " ".repeat(indent)).unwrap();
+    }
+    out.push(']');
+}
+
+fn push_json_string(out: &mut String, value: &str) {
+    out.push('"');
+    for ch in value.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            ch if ch.is_control() => write!(out, "\\u{:04x}", ch as u32).unwrap(),
+            ch => out.push(ch),
+        }
+    }
+    out.push('"');
 }
 
 #[derive(Clone, Copy)]
@@ -261,12 +539,32 @@ impl Mode {
         }
     }
 
+    fn corpus_path(self) -> &'static str {
+        match self {
+            Self::Ui => "tests/ui/",
+            Self::SolcSolidity => "testdata/solidity/test/",
+            Self::SolcYul => "testdata/solidity/test/libyul/",
+        }
+    }
+
     fn is_solc(self) -> bool {
         matches!(self, Self::SolcSolidity | Self::SolcYul)
     }
 
     fn allows_yul(self) -> bool {
         !matches!(self, Self::SolcSolidity)
+    }
+
+    fn is_candidate_file(self, path: &Path) -> bool {
+        path.extension().is_some_and(|ext| ext == "sol" || (self.allows_yul() && ext == "yul"))
+    }
+
+    fn skip_reason(self, path: &Path) -> Option<&'static str> {
+        match self {
+            Self::Ui => None,
+            Self::SolcSolidity => solc::solidity::should_skip(path).err(),
+            Self::SolcYul => solc::yul::should_skip(path).err(),
+        }
     }
 }
 
