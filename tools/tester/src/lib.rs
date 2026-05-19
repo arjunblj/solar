@@ -197,9 +197,9 @@ fn has_solc_type_error(path: &Path) -> bool {
     let Ok(src) = std::fs::read_to_string(path) else {
         return false;
     };
-    errors::Error::load_solc(&src)
-        .iter()
-        .any(|error| error.is_error() && matches!(error.solc_kind, Some(solc::SolcErrorKind::TypeError)))
+    errors::Error::load_solc(&src).iter().any(|error| {
+        error.is_error() && matches!(error.solc_kind, Some(solc::SolcErrorKind::TypeError))
+    })
 }
 
 fn per_file_config(config: &mut ui_test::Config, file: &Spanned<Vec<u8>>, cfg: MyConfig<'_>) {
