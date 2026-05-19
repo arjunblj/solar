@@ -340,7 +340,7 @@ struct DiagnosticCode {
 /// This is the shape used for entries in a Standard JSON output `errors` array.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SolcDiagnostic {
+pub(super) struct SolcDiagnostic {
     pub source_location: Option<SourceLocation>,
     pub secondary_source_locations: Vec<SourceLocation>,
     r#type: String,
@@ -352,7 +352,7 @@ pub struct SolcDiagnostic {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-pub struct SourceLocation {
+pub(super) struct SourceLocation {
     pub file: String,
     pub start: u32,
     pub end: u32,
@@ -363,7 +363,7 @@ pub struct SourceLocation {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
-pub enum Severity {
+pub(super) enum Severity {
     Error,
     Warning,
     Info,
