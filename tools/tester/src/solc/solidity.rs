@@ -122,12 +122,12 @@ pub(crate) fn should_skip(path: &Path) -> Result<(), FixtureReason> {
     Ok(())
 }
 
-pub(crate) fn should_skip_typeck(path: &Path) -> Result<(), &'static str> {
+pub(crate) fn should_skip_typeck(path: &Path) -> Result<(), FixtureReason> {
     should_skip(path)?;
 
     let path_contains = path_contains_curry(path);
     if !path_contains("/nameAndTypeResolution/") && !path_contains("/types/") {
-        return Err("not part of the initial typeck corpus slice");
+        return Err(skip("not part of the initial typeck corpus slice"));
     }
 
     Ok(())
