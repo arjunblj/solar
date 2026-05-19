@@ -112,6 +112,17 @@ pub(crate) fn should_skip(path: &Path) -> Result<(), &'static str> {
     Ok(())
 }
 
+pub(crate) fn should_skip_typeck(path: &Path) -> Result<(), &'static str> {
+    should_skip(path)?;
+
+    let path_contains = path_contains_curry(path);
+    if !path_contains("/nameAndTypeResolution/") && !path_contains("/types/") {
+        return Err("not part of the initial typeck corpus slice");
+    }
+
+    Ok(())
+}
+
 /// Handles `====` delimiters in a solc test file, and creates temporary files as necessary.
 ///
 /// Returns `true` if it contains delimiters and the caller should not compile the original file.
