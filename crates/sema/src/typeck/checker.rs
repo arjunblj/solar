@@ -446,7 +446,11 @@ impl<'gcx> TypeChecker<'gcx> {
                             )
                         } else {
                             let ty = ty.with_loc(self.gcx, DataLocation::Memory);
-                            self.gcx.mk_builtin_fn(&[], hir::StateMutability::Pure, &[ty])
+                            self.gcx.mk_builtin_fn(
+                                &[self.gcx.types.uint(256)],
+                                hir::StateMutability::Pure,
+                                &[ty],
+                            )
                         }
                     }
                     TyKind::Err(_) => ty,
@@ -541,7 +545,6 @@ impl<'gcx> TypeChecker<'gcx> {
                 }
             }
             hir::ExprKind::Type(ref ty) => {
-                debug_assert!(ty.kind.is_elementary(), "non-elementary ExprKind::Type: {ty:?}");
                 self.gcx.mk_ty(TyKind::Type(self.gcx.type_of_hir_ty(ty)))
             }
             hir::ExprKind::Unary(op, inner) => {
