@@ -570,7 +570,9 @@ fn baseline_file_bucket(path: &Path, mode: Mode) -> BaselineBucket {
     match mode {
         Mode::Ui => BaselineBucket::Runnable,
         Mode::SolcSolidity => skip_result_bucket(solc::solidity::should_skip(path)),
-        Mode::SolcSolidityTypeck => typeck_skip_result_bucket(solc::solidity::should_skip_typeck(path)),
+        Mode::SolcSolidityTypeck => {
+            typeck_skip_result_bucket(solc::solidity::should_skip_typeck(path))
+        }
         Mode::SolcYul => skip_result_bucket(solc::yul::should_skip(path)),
     }
 }
