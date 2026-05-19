@@ -66,14 +66,15 @@ fn config(cmd: &'static Path, args: &ui_test::Args, mode: Mode) -> ui_test::Conf
 
     let path = match mode {
         Mode::Ui => "tests/ui/",
-        Mode::SolcSolidity => "testdata/solidity/test/",
+        Mode::SolcSolidity | Mode::SolcSolidityTypeck => "testdata/solidity/test/",
         Mode::SolcYul => "testdata/solidity/test/libyul/",
     };
     let tests_root = root.join(path);
     assert!(
         tests_root.exists(),
-        "tests root directory does not exist: {path};\n\
-         you may need to initialize submodules: `git submodule update --init --checkout`"
+        "tests root directory does not exist: {} ({path});\n\
+         you may need to initialize submodules: `git submodule update --init --checkout`",
+        tests_root.display(),
     );
 
     let mut config = ui_test::Config {
@@ -86,8 +87,10 @@ fn config(cmd: &'static Path, args: &ui_test::Args, mode: Mode) -> ui_test::Conf
             args: {
                 let mut args =
                     vec!["-j1", "--error-format=rustc-json", "-Zui-testing", "-Zparse-yul"];
-                if mode.is_solc() {
-                    args.push("--stop-after=parsing");
+                match mode {
+                    Mode::SolcSolidity | Mode::SolcYul => args.push("--stop-after=parsing"),
+                    Mode::SolcSolidityTypeck => args.push("-Ztypeck"),
+                    Mode::Ui => {}
                 }
                 args.into_iter().map(Into::into).collect()
             },
@@ -182,9 +185,21 @@ fn file_filter(path: &Path, config: &ui_test::Config, cfg: MyConfig<'_>) -> Opti
     let skip = match cfg.mode {
         Mode::Ui => false,
         Mode::SolcSolidity => solc::solidity::should_skip(path).is_err(),
+        Mode::SolcSolidityTypeck => {
+            solc::solidity::should_skip(path).is_err() || !has_solc_type_error(path)
+        }
         Mode::SolcYul => solc::yul::should_skip(path).is_err(),
     };
     Some(!skip)
+}
+
+fn has_solc_type_error(path: &Path) -> bool {
+    let Ok(src) = std::fs::read_to_string(path) else {
+        return false;
+    };
+    errors::Error::load_solc(&src)
+        .iter()
+        .any(|error| error.is_error() && matches!(error.solc_kind, Some(solc::SolcErrorKind::TypeError)))
 }
 
 fn per_file_config(config: &mut ui_test::Config, file: &Spanned<Vec<u8>>, cfg: MyConfig<'_>) {
@@ -224,7 +239,7 @@ fn solc_per_file_config(config: &mut ui_test::Config, src: &str, path: &Path, cf
     };
     config.comment_defaults.base().exit_status = code.map(Spanned::dummy).into();
 
-    if matches!(cfg.mode, Mode::SolcSolidity) {
+    if matches!(cfg.mode, Mode::SolcSolidity | Mode::SolcSolidityTypeck) {
         let flags = &mut config.comment_defaults.base().compile_flags;
         let has_delimiters = solc::solidity::handle_delimiters(src, path, cfg.tmp_dir, |arg| {
             flags.push(arg.into_string().unwrap())
@@ -240,6 +255,7 @@ fn solc_per_file_config(config: &mut ui_test::Config, src: &str, path: &Path, cf
 enum Mode {
     Ui,
     SolcSolidity,
+    SolcSolidityTypeck,
     SolcYul,
 }
 
@@ -248,6 +264,7 @@ impl Mode {
         Some(match s {
             "ui" => Self::Ui,
             "solc-solidity" => Self::SolcSolidity,
+            "solc-solidity-typeck" => Self::SolcSolidityTypeck,
             "solc-yul" => Self::SolcYul,
             _ => return None,
         })
@@ -257,16 +274,17 @@ impl Mode {
         match self {
             Self::Ui => "ui",
             Self::SolcSolidity => "solc-solidity",
+            Self::SolcSolidityTypeck => "solc-solidity-typeck",
             Self::SolcYul => "solc-yul",
         }
     }
 
     fn is_solc(self) -> bool {
-        matches!(self, Self::SolcSolidity | Self::SolcYul)
+        matches!(self, Self::SolcSolidity | Self::SolcSolidityTypeck | Self::SolcYul)
     }
 
     fn allows_yul(self) -> bool {
-        !matches!(self, Self::SolcSolidity)
+        !matches!(self, Self::SolcSolidity | Self::SolcSolidityTypeck)
     }
 }
 
