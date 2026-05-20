@@ -13,7 +13,6 @@ import json
 import os
 import shutil
 import subprocess
-import time
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -54,20 +53,29 @@ COMMANDS: tuple[dict[str, Any], ...] = (
     },
     {
         "name": "tester-ui-mode",
-        "argv": ("cargo", "test", "-p", "solar", "--test", "tests", "--", "--list"),
+        "argv": ("cargo", "test", "-p", "solar-compiler", "--test", "tests", "--", "--list"),
         "required_tools": ("cargo",),
         "env": {"TESTER_MODE": "ui"},
     },
     {
         "name": "tester-solc-solidity-mode",
-        "argv": ("cargo", "test", "-p", "solar", "--test", "tests", "--", "--list"),
+        "argv": ("cargo", "test", "-p", "solar-compiler", "--test", "tests", "--", "--list"),
         "required_tools": ("cargo",),
+        "required_corpora": ("solc-solidity",),
         "env": {"TESTER_MODE": "solc-solidity"},
     },
     {
-        "name": "tester-solc-yul-mode",
-        "argv": ("cargo", "test", "-p", "solar", "--test", "tests", "--", "--list"),
+        "name": "tester-solc-solidity-typeck-mode",
+        "argv": ("cargo", "test", "-p", "solar-compiler", "--test", "tests", "--", "--list"),
         "required_tools": ("cargo",),
+        "required_corpora": ("solc-solidity",),
+        "env": {"TESTER_MODE": "solc-solidity-typeck"},
+    },
+    {
+        "name": "tester-solc-yul-mode",
+        "argv": ("cargo", "test", "-p", "solar-compiler", "--test", "tests", "--", "--list"),
+        "required_tools": ("cargo",),
+        "required_corpora": ("solc-yul",),
         "env": {"TESTER_MODE": "solc-yul"},
     },
     {
@@ -78,17 +86,29 @@ COMMANDS: tuple[dict[str, Any], ...] = (
 )
 
 CORPORA: tuple[dict[str, Any], ...] = (
-    {"name": "ui", "paths": ("crates/solar/tests/ui", "tests/ui")},
-    {"name": "solc-solidity", "paths": ("testdata/solidity", "tests/solc/solidity", "crates/solar/tests/solc")},
-    {"name": "solc-yul", "paths": ("testdata/yul", "tests/solc/yul", "crates/solar/tests/yul")},
+    {"name": "ui", "paths": ("tests/ui", "crates/solar/tests/ui"), "patterns": ("*.sol", "*.yul")},
+    {"name": "solc-solidity", "paths": ("testdata/solidity/test",), "patterns": ("*.sol",)},
+    {"name": "solc-yul", "paths": ("testdata/solidity/test/libyul",), "patterns": ("*.yul",)},
     {"name": "foundry", "paths": ("testdata/foundry", "corpus/foundry", "foundry")},
 )
 
 TESTER_MODES: tuple[dict[str, str], ...] = (
     {"name": "ui", "env": "TESTER_MODE=ui", "source": "tools/tester/src/lib.rs"},
     {"name": "solc-solidity", "env": "TESTER_MODE=solc-solidity", "source": "tools/tester/src/lib.rs"},
+    {
+        "name": "solc-solidity-typeck",
+        "env": "TESTER_MODE=solc-solidity-typeck",
+        "source": "tools/tester/src/lib.rs",
+    },
     {"name": "solc-yul", "env": "TESTER_MODE=solc-yul", "source": "tools/tester/src/lib.rs"},
 )
+
+TESTER_MODE_CORPORA: dict[str, str] = {
+    "ui": "ui",
+    "solc-solidity": "solc-solidity",
+    "solc-solidity-typeck": "solc-solidity",
+    "solc-yul": "solc-yul",
+}
 
 
 class CommandResult(dict[str, Any]):
@@ -104,7 +124,6 @@ def rel(path: Path) -> str:
 
 def run(argv: Iterable[str], *, env: dict[str, str] | None = None, timeout: float = 60.0) -> CommandResult:
     argv_tuple = tuple(argv)
-    started = time.monotonic()
     try:
         completed = subprocess.run(
             argv_tuple,
@@ -116,28 +135,22 @@ def run(argv: Iterable[str], *, env: dict[str, str] | None = None, timeout: floa
             timeout=timeout,
             check=False,
         )
-        elapsed = time.monotonic() - started
         return CommandResult(
             status="ok" if completed.returncode == 0 else "failed",
             exit_code=completed.returncode,
-            elapsed_seconds=round(elapsed, 3),
             stdout=completed.stdout.strip().splitlines()[:20],
             stderr=completed.stderr.strip().splitlines()[:20],
         )
     except FileNotFoundError as exc:
-        elapsed = time.monotonic() - started
         return CommandResult(
             status="unavailable",
             exit_code=None,
-            elapsed_seconds=round(elapsed, 3),
             error=str(exc),
         )
     except subprocess.TimeoutExpired as exc:
-        elapsed = time.monotonic() - started
         return CommandResult(
             status="timeout",
             exit_code=None,
-            elapsed_seconds=round(elapsed, 3),
             stdout=(exc.stdout or "").strip().splitlines()[:20] if isinstance(exc.stdout, str) else [],
             stderr=(exc.stderr or "").strip().splitlines()[:20] if isinstance(exc.stderr, str) else [],
         )
@@ -188,7 +201,6 @@ def collect_tools() -> dict[str, Any]:
             "available": tool_available(name, result),
             "version": version_lines[0] if version_lines else None,
             "argv": list(argv),
-            "elapsed_seconds": result["elapsed_seconds"],
         }
         if result.get("exit_code") is not None:
             tools[name]["exit_code"] = result["exit_code"]
@@ -197,28 +209,45 @@ def collect_tools() -> dict[str, Any]:
     return tools
 
 
-def collect_commands(tools: dict[str, Any]) -> list[dict[str, Any]]:
+def collect_commands(tools: dict[str, Any], corpora_by_name: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     commands: list[dict[str, Any]] = []
     for spec in COMMANDS:
         missing = [name for name in spec["required_tools"] if tools.get(name, {}).get("status") != "ok"]
+        missing_corpora = [
+            name for name in spec.get("required_corpora", ()) if corpora_by_name.get(name, {}).get("status") != "available"
+        ]
         entry: dict[str, Any] = {
             "name": spec["name"],
             "argv": list(spec["argv"]),
             "env": spec.get("env", {}),
         }
-        if missing:
+        if missing or missing_corpora:
             entry.update(
                 {
                     "status": "unavailable",
                     "exit_code": None,
-                    "elapsed_seconds": 0.0,
                     "missing_tools": missing,
+                    "missing_corpora": missing_corpora,
                 }
             )
         else:
-            entry.update(run(spec["argv"], env=spec.get("env"), timeout=120.0))
+            result = run(spec["argv"], env=spec.get("env"), timeout=120.0)
+            entry["status"] = result["status"]
+            entry["exit_code"] = result["exit_code"]
+            if result.get("error"):
+                entry["error"] = result["error"]
         commands.append(entry)
     return commands
+
+
+def count_files(path: Path, patterns: tuple[str, ...]) -> int:
+    if path.is_file():
+        return 1
+    return sum(1 for child in path.rglob("*") if child.is_file() and matches_patterns(child, patterns))
+
+
+def matches_patterns(path: Path, patterns: tuple[str, ...]) -> bool:
+    return not patterns or any(path.match(pattern) for pattern in patterns)
 
 
 def collect_corpora() -> list[dict[str, Any]]:
@@ -227,12 +256,10 @@ def collect_corpora() -> list[dict[str, Any]]:
         candidates = [ROOT / path for path in spec["paths"]]
         existing = [path for path in candidates if path.exists()]
         file_count = 0
+        patterns = tuple(spec.get("patterns", ()))
         if existing:
             for path in existing:
-                if path.is_file():
-                    file_count += 1
-                else:
-                    file_count += sum(1 for child in path.rglob("*") if child.is_file())
+                file_count += count_files(path, patterns)
         corpora.append(
             {
                 "name": spec["name"],
@@ -240,20 +267,60 @@ def collect_corpora() -> list[dict[str, Any]]:
                 "paths": [rel(path) for path in candidates],
                 "available_paths": [rel(path) for path in existing],
                 "file_count": file_count,
+                "patterns": list(patterns),
             }
         )
     return corpora
 
 
+def collect_tester_lanes(tools: dict[str, Any], corpora_by_name: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    lanes: list[dict[str, Any]] = []
+    for mode in TESTER_MODES:
+        name = mode["name"]
+        corpus_name = TESTER_MODE_CORPORA[name]
+        corpus = corpora_by_name[corpus_name]
+        missing_tools = []
+        if name.startswith("solc-") and tools.get("solc", {}).get("status") != "ok":
+            missing_tools.append("solc")
+
+        status = "available"
+        if missing_tools or corpus["status"] != "available":
+            status = "unavailable"
+
+        lanes.append(
+            {
+                "name": name,
+                "env": mode["env"],
+                "source": mode["source"],
+                "corpus": corpus_name,
+                "status": status,
+                "missing_tools": missing_tools,
+                "missing_corpora": [] if corpus["status"] == "available" else [corpus_name],
+                "counts": {
+                    "total": corpus["file_count"],
+                    "available": corpus["file_count"] if status == "available" else 0,
+                    "unavailable": 0 if status == "available" else corpus["file_count"],
+                    "pass": None,
+                    "fail": None,
+                    "skip": 0,
+                    "xfail": 0,
+                },
+            }
+        )
+    return lanes
+
+
 def build_ledger() -> dict[str, Any]:
     tools = collect_tools()
+    corpora = collect_corpora()
+    corpora_by_name = {corpus["name"]: corpus for corpus in corpora}
     return {
         "schema_version": 1,
         "repo": repo_info(),
         "tools": tools,
-        "tester_modes": list(TESTER_MODES),
-        "corpora": collect_corpora(),
-        "commands": collect_commands(tools),
+        "tester_modes": collect_tester_lanes(tools, corpora_by_name),
+        "corpora": corpora,
+        "commands": collect_commands(tools, corpora_by_name),
     }
 
 
@@ -266,13 +333,18 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT, help="ledger path to write")
+    parser.add_argument("--json", action="store_true", help="write ledger JSON to stdout instead of a file")
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
+    ledger = build_ledger()
+    if args.json:
+        print(json.dumps(ledger, indent=2, sort_keys=True))
+        return 0
     output = args.output if args.output.is_absolute() else ROOT / args.output
-    write_json(output, build_ledger())
+    write_json(output, ledger)
     print(rel(output))
     return 0
 
