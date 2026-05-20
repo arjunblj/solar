@@ -136,18 +136,10 @@ fn validate_standard_json_input(input: &serde_json::Value) -> Vec<serde_json::Va
         None => errors.push(standard_json_error("JSONError", "missing required field: sources")),
     }
 
-    if let Some(settings) = input.get("settings") {
-        match settings.as_object() {
-            Some(settings) => {
-                for setting in settings.keys() {
-                    errors.push(standard_json_error(
-                        "JSONError",
-                        format!("unsupported settings field: settings.{setting}"),
-                    ));
-                }
-            }
-            None => errors.push(standard_json_error("JSONError", "settings must be an object")),
-        }
+    if let Some(settings) = input.get("settings")
+        && !settings.is_object()
+    {
+        errors.push(standard_json_error("JSONError", "settings must be an object"));
     }
 
     errors
