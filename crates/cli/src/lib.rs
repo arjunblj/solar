@@ -139,11 +139,17 @@ fn validate_standard_json_input(input: &serde_json::Value) -> Vec<serde_json::Va
     if let Some(settings) = input.get("settings") {
         match settings.as_object() {
             Some(settings) => {
-                for setting in settings.keys() {
-                    errors.push(standard_json_error(
-                        "JSONError",
-                        format!("unsupported settings field: settings.{setting}"),
-                    ));
+                for (setting, value) in settings {
+                    match setting.as_str() {
+                        "evmVersion" | "libraries" | "metadata" | "optimizer" => {}
+                        "outputSelection" => {
+                            validate_standard_json_output_selection(value, &mut errors)
+                        }
+                        _ => errors.push(standard_json_error(
+                            "JSONError",
+                            format!("unsupported settings field: settings.{setting}"),
+                        )),
+                    }
                 }
             }
             None => errors.push(standard_json_error("JSONError", "settings must be an object")),
@@ -151,6 +157,63 @@ fn validate_standard_json_input(input: &serde_json::Value) -> Vec<serde_json::Va
     }
 
     errors
+}
+
+fn validate_standard_json_output_selection(
+    output_selection: &serde_json::Value,
+    errors: &mut Vec<serde_json::Value>,
+) {
+    let Some(source_selectors) = output_selection.as_object() else {
+        errors.push(standard_json_error("JSONError", "settings.outputSelection must be an object"));
+        return;
+    };
+
+    for (source_selector, contract_selectors) in source_selectors {
+        let Some(contract_selectors) = contract_selectors.as_object() else {
+            errors.push(standard_json_error(
+                "JSONError",
+                format!("settings.outputSelection[{source_selector:?}] must be an object"),
+            ));
+            continue;
+        };
+
+        for (contract_selector, outputs) in contract_selectors {
+            let Some(outputs) = outputs.as_array() else {
+                errors.push(standard_json_error(
+                    "JSONError",
+                    format!(
+                        "settings.outputSelection[{source_selector:?}][{contract_selector:?}] must be an array"
+                    ),
+                ));
+                continue;
+            };
+
+            for output in outputs {
+                let Some(output) = output.as_str() else {
+                    errors.push(standard_json_error(
+                        "JSONError",
+                        format!(
+                            "settings.outputSelection[{source_selector:?}][{contract_selector:?}] entries must be strings"
+                        ),
+                    ));
+                    continue;
+                };
+
+                if !is_supported_standard_json_output(output) {
+                    errors.push(standard_json_error(
+                        "JSONError",
+                        format!(
+                            "unsupported outputSelection entry: settings.outputSelection[{source_selector:?}][{contract_selector:?}] contains {output:?}"
+                        ),
+                    ));
+                }
+            }
+        }
+    }
+}
+
+fn is_supported_standard_json_output(output: &str) -> bool {
+    matches!(output, "abi" | "evm.methodIdentifiers")
 }
 
 fn standard_json_error(error_type: &'static str, message: impl Into<String>) -> serde_json::Value {
