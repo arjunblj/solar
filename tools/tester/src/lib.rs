@@ -426,6 +426,10 @@ impl BaselineTool {
 
 struct BaselineMode {
     name: &'static str,
+    tester_mode: &'static str,
+    corpus_id: String,
+    solc_version: String,
+    solc_version_source: &'static str,
     corpus_root: String,
     command: Vec<String>,
     counts: BaselineCounts,
@@ -441,6 +445,10 @@ impl BaselineMode {
 
         Self {
             name: mode.to_str(),
+            tester_mode: mode.to_str(),
+            corpus_id: corpus_id(&config.root_dir, mode),
+            solc_version: solc_version_or_unknown(),
+            solc_version_source: solc_version_source(),
             corpus_root: display_path(&config.root_dir),
             command,
             counts: BaselineCounts::scan(&config.root_dir, mode),
@@ -467,6 +475,22 @@ impl BaselineMode {
         write_json_string(json, self.name);
         json.push_str(",\n");
         json.push_str(&field_indent);
+        json.push_str("\"tester_mode\": ");
+        write_json_string(json, self.tester_mode);
+        json.push_str(",\n");
+        json.push_str(&field_indent);
+        json.push_str("\"corpus_id\": ");
+        write_json_string(json, &self.corpus_id);
+        json.push_str(",\n");
+        json.push_str(&field_indent);
+        json.push_str("\"solc_version\": ");
+        write_json_string(json, &self.solc_version);
+        json.push_str(",\n");
+        json.push_str(&field_indent);
+        json.push_str("\"solc_version_source\": ");
+        write_json_string(json, self.solc_version_source);
+        json.push_str(",\n");
+        json.push_str(&field_indent);
         json.push_str("\"corpus_root\": ");
         write_json_string(json, &self.corpus_root);
         json.push_str(",\n");
@@ -486,6 +510,32 @@ impl BaselineMode {
         json.push_str(indent);
         json.push('}');
     }
+}
+
+fn corpus_id(root: &Path, mode: Mode) -> String {
+    root.file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| mode.to_str())
+        .to_owned()
+}
+
+fn solc_version_or_unknown() -> String {
+    let solc = std::env::var_os("SOLC")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("solc"));
+
+    std::process::Command::new(solc)
+        .arg("--version")
+        .output()
+        .ok()
+        .and_then(|output| first_output_line(&output))
+        .unwrap_or_else(|| "unknown".to_owned())
+}
+
+fn solc_version_source() -> &'static str {
+    "solc --version"
 }
 
 #[derive(Default)]
@@ -517,6 +567,7 @@ impl BaselineCounts {
     fn write_json(&self, json: &mut String) {
         json.push_str("{\"total\": ");
         let _ = write!(json, "{}", self.total);
+        let _ = write!(json, ", \"runnable\": {}", self.runnable);
         json.push_str(", \"pass\": ");
         write_json_opt_u64(json, self.pass);
         json.push_str(", \"fail\": ");
