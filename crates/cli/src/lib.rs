@@ -6,9 +6,10 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 use clap::Parser as _;
-use solar_interface::{Result, Session};
+use solar_interface::{Result, Session, config::CompilerOutput};
 use solar_sema::CompilerRef;
 use std::{
+    collections::{BTreeMap, BTreeSet},
     io::{self, Read, Write},
     ops::ControlFlow,
 };
@@ -61,6 +62,7 @@ fn run_standard_json(opts: Opts) -> Result {
     if let Err(error) = stdin.read_to_string(&mut input) {
         write_standard_json_output(
             opts.pretty_json,
+            serde_json::Map::new(),
             vec![standard_json_error("IOError", format!("failed to read stdin: {error}"))],
         );
         return Ok(());
@@ -71,15 +73,196 @@ fn run_standard_json(opts: Opts) -> Result {
         Err(error) => {
             write_standard_json_output(
                 opts.pretty_json,
+                serde_json::Map::new(),
                 vec![standard_json_error("JSONError", format!("invalid JSON input: {error}"))],
             );
             return Ok(());
         }
     };
 
-    let errors = validate_standard_json_input(&input);
-    write_standard_json_output(opts.pretty_json, errors);
+    let mut errors = validate_standard_json_input(&input);
+    let selections = standard_json_selected_outputs(&input, &mut errors);
+
+    let mut contracts = serde_json::Map::new();
+    if errors.is_empty() && selections.iter().any(|selection| selection.is_compilation_output()) {
+        let output = compile_standard_json_outputs(opts.clone(), &input, &selections)?;
+        errors.extend(output.errors);
+        contracts = output.contracts;
+    }
+
+    write_standard_json_output(opts.pretty_json, contracts, errors);
     Ok(())
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum StandardJsonOutputSelection {
+    Abi,
+    MethodIdentifiers,
+}
+
+impl StandardJsonOutputSelection {
+    fn is_compilation_output(self) -> bool {
+        matches!(self, Self::Abi | Self::MethodIdentifiers)
+    }
+}
+
+#[derive(Default)]
+struct StandardJsonCompileOutput {
+    contracts: serde_json::Map<String, serde_json::Value>,
+    errors: Vec<serde_json::Value>,
+}
+
+fn standard_json_selected_outputs(
+    input: &serde_json::Value,
+    errors: &mut Vec<serde_json::Value>,
+) -> BTreeSet<StandardJsonOutputSelection> {
+    let mut selections = BTreeSet::new();
+    let Some(settings) = input.get("settings") else { return selections };
+    let Some(settings) = settings.as_object() else { return selections };
+    let Some(selected_outputs) = settings.get("outputSelection") else { return selections };
+
+    let Some(selected_outputs) = selected_outputs.as_object() else {
+        errors.push(standard_json_error("JSONError", "settings.outputSelection must be an object"));
+        return selections;
+    };
+
+    for (source_name, contracts) in selected_outputs {
+        let Some(contracts) = contracts.as_object() else {
+            errors.push(standard_json_error(
+                "JSONError",
+                format!("settings.outputSelection.{source_name} must be an object"),
+            ));
+            continue;
+        };
+
+        for (contract_name, outputs) in contracts {
+            let Some(outputs) = outputs.as_array() else {
+                errors.push(standard_json_error(
+                    "JSONError",
+                    format!(
+                        "settings.outputSelection.{source_name}.{contract_name} must be an array"
+                    ),
+                ));
+                continue;
+            };
+
+            for output in outputs {
+                let Some(output) = output.as_str() else {
+                    errors.push(standard_json_error(
+                        "JSONError",
+                        format!(
+                            "settings.outputSelection.{source_name}.{contract_name} entries must be strings"
+                        ),
+                    ));
+                    continue;
+                };
+
+                match output {
+                    "abi" => {
+                        selections.insert(StandardJsonOutputSelection::Abi);
+                    }
+                    "evm.methodIdentifiers" => {
+                        selections.insert(StandardJsonOutputSelection::MethodIdentifiers);
+                    }
+                    "*" => {
+                        selections.insert(StandardJsonOutputSelection::Abi);
+                        selections.insert(StandardJsonOutputSelection::MethodIdentifiers);
+                        errors.push(standard_json_error(
+                            "JSONError",
+                            "unsupported selected output: * includes codegen/runtime artifacts that Solar does not support via standard JSON yet",
+                        ));
+                    }
+                    unsupported => errors.push(standard_json_error(
+                        "JSONError",
+                        format!("unsupported selected output: {unsupported}"),
+                    )),
+                }
+            }
+        }
+    }
+
+    selections
+}
+
+fn compile_standard_json_outputs(
+    mut opts: Opts,
+    input: &serde_json::Value,
+    selections: &BTreeSet<StandardJsonOutputSelection>,
+) -> Result<StandardJsonCompileOutput> {
+    let mut output = StandardJsonCompileOutput::default();
+
+    opts.emit.clear();
+    if selections.contains(&StandardJsonOutputSelection::Abi) {
+        opts.emit.push(CompilerOutput::Abi);
+    }
+    if selections.contains(&StandardJsonOutputSelection::MethodIdentifiers) {
+        opts.emit.push(CompilerOutput::Hashes);
+    }
+
+    run_compiler_with(opts, |compiler| {
+        let sess = compiler.gcx().sess;
+        let mut pcx = compiler.parse();
+        let mut paths = Vec::new();
+        if let Some(sources) = input.get("sources").and_then(serde_json::Value::as_object) {
+            for (name, source) in sources {
+                if let Some(content) = source.get("content").and_then(serde_json::Value::as_str) {
+                    sess.source_map()
+                        .new_source_file(std::path::PathBuf::from(name), content.to_string())
+                        .map_err(|error| {
+                            sess.dcx
+                                .err(format!(
+                                    "failed to load standard JSON source {name:?}: {error}"
+                                ))
+                                .emit()
+                        })?;
+                    paths.push(name.as_str());
+                }
+            }
+        }
+        pcx.par_load_files(paths)?;
+        pcx.parse();
+
+        let ControlFlow::Continue(()) = compiler.lower_asts()? else { return Ok(()) };
+        compiler.drop_asts();
+        let ControlFlow::Continue(()) = compiler.analysis()? else { return Ok(()) };
+
+        let gcx = compiler.gcx();
+        for id in gcx.hir.contract_ids() {
+            let fqn = gcx.contract_fully_qualified_name(id).to_string();
+            let Some((source, contract)) = fqn.rsplit_once(':') else { continue };
+            let source_entry = output
+                .contracts
+                .entry(source.to_string())
+                .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+            let serde_json::Value::Object(source_contracts) = source_entry else { continue };
+            let mut contract_output = serde_json::Map::new();
+
+            if selections.contains(&StandardJsonOutputSelection::Abi) {
+                contract_output
+                    .insert("abi".to_string(), serde_json::to_value(gcx.contract_abi(id)).unwrap());
+            }
+            if selections.contains(&StandardJsonOutputSelection::MethodIdentifiers) {
+                let mut method_identifiers = BTreeMap::new();
+                for f in gcx.interface_functions(id) {
+                    method_identifiers.insert(
+                        gcx.item_signature(f.id.into()).to_string(),
+                        alloy_primitives::hex::encode(f.selector),
+                    );
+                }
+                contract_output.insert(
+                    "evm".to_string(),
+                    serde_json::json!({ "methodIdentifiers": method_identifiers }),
+                );
+            }
+
+            source_contracts
+                .insert(contract.to_string(), serde_json::Value::Object(contract_output));
+        }
+
+        Ok(())
+    })?;
+
+    Ok(output)
 }
 
 fn validate_standard_json_input(input: &serde_json::Value) -> Vec<serde_json::Value> {
@@ -140,10 +323,13 @@ fn validate_standard_json_input(input: &serde_json::Value) -> Vec<serde_json::Va
         match settings.as_object() {
             Some(settings) => {
                 for setting in settings.keys() {
-                    errors.push(standard_json_error(
-                        "JSONError",
-                        format!("unsupported settings field: settings.{setting}"),
-                    ));
+                    match setting.as_str() {
+                        "outputSelection" => {}
+                        _ => errors.push(standard_json_error(
+                            "JSONError",
+                            format!("unsupported settings field: settings.{setting}"),
+                        )),
+                    }
                 }
             }
             None => errors.push(standard_json_error("JSONError", "settings must be an object")),
@@ -165,14 +351,22 @@ fn standard_json_error(error_type: &'static str, message: impl Into<String>) -> 
     })
 }
 
-fn write_standard_json_output(pretty: bool, errors: Vec<serde_json::Value>) {
-    let output = serde_json::json!({ "errors": errors });
+fn write_standard_json_output(
+    pretty: bool,
+    contracts: serde_json::Map<String, serde_json::Value>,
+    errors: Vec<serde_json::Value>,
+) {
+    let mut output = serde_json::Map::new();
+    output.insert("errors".to_string(), serde_json::Value::Array(errors));
+    if !contracts.is_empty() {
+        output.insert("contracts".to_string(), serde_json::Value::Object(contracts));
+    }
     let stdout = io::stdout();
     let mut stdout = stdout.lock();
     let result = if pretty {
-        serde_json::to_writer_pretty(&mut stdout, &output)
+        serde_json::to_writer_pretty(&mut stdout, &serde_json::Value::Object(output))
     } else {
-        serde_json::to_writer(&mut stdout, &output)
+        serde_json::to_writer(&mut stdout, &serde_json::Value::Object(output))
     };
     if result.is_ok() {
         let _ = writeln!(stdout);
