@@ -2,6 +2,20 @@
 
 Guidance for AI coding agents working in this repository.
 
+## For autonomous agents on `arjunblj/solar`
+
+This is the autonomous-campaign fork of `paradigmxyz/solar`. The full project spec, lane catalog, oracle ladder, completion contract, Foundry integration strategy, performance leadership targets, and self-replenishing work loop live in [`PADS.md`](./PADS.md). Read PADS.md before planning, dispatching tasks, or judging completion; the harness's planner reads it on every kickoff.
+
+Operational defaults:
+
+- All writes go to `arjunblj/solar:main`. Never open a PR against `paradigmxyz/solar`. Reference upstream for shape and inspiration only.
+- The sandbox bootstrap is `bash .pads/setup.sh` (idempotent; safe inside a pre-warmed E2B template).
+- The PR rubric is `.pads/rules/pr-rubric.md`. The PR body templates are `.pads/rules/pr-shape.md`. Always-on guardrails are `.pads/rules/always.md`.
+- Rust toolchain: `1.95.0` is the workspace MSRV (pinned in `rust-toolchain.toml`); `cargo +nightly fmt` is required because `rustfmt.toml` uses unstable features.
+- Pinned reference compiler: `solc 0.8.31` via `solc-select`. The submodule `testdata/solidity` is the pinned upstream test corpus.
+
+The rest of this file is upstream's contributor-facing AGENTS.md - the conventions below apply to both upstream contributors and this fork's autonomous workers.
+
 ## Project Overview
 
 Solar is a blazingly fast, modular Solidity compiler written in Rust, aiming to be a modern alternative to solc.
