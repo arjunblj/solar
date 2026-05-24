@@ -17,6 +17,24 @@ support.
 
 Any claim must name which classification it reaches.
 
+## Feature Coverage Snapshot
+
+Counts are feature-scoped tester totals when a committed runner exposes
+them. Use `unavailable` when the repository has no deterministic
+feature-scoped counter yet; do not infer support from a parser keyword or
+from unrelated whole-corpus totals.
+
+Feature | Corpus count | Pass | Fail | Xfail | Unsupported | Current classification | Count evidence
+--- | --- | --- | --- | --- | --- | --- | ---
+standard-json | unavailable | unavailable | unavailable | unavailable | unavailable | needs verification | No committed feature-scoped Standard JSON corpus counter in `tools/tester`.
+transient | unavailable | unavailable | unavailable | unavailable | unavailable | parser-aware only until measured | No committed feature-scoped transient-storage tester counter.
+UDVT | unavailable | unavailable | unavailable | unavailable | unavailable | parser-aware only until measured | No committed feature-scoped user-defined value type tester counter.
+errors | unavailable | unavailable | unavailable | unavailable | unavailable | parser-aware only until measured | No committed feature-scoped custom-error tester counter.
+inheritance | unavailable | unavailable | unavailable | unavailable | unavailable | parser-aware only until measured | No committed feature-scoped inheritance tester counter.
+asm | unavailable | unavailable | unavailable | unavailable | unavailable | parser-aware only until measured | No committed feature-scoped inline-assembly tester counter.
+libraries | unavailable | unavailable | unavailable | unavailable | unavailable | parser-aware only until measured | No committed feature-scoped library tester counter.
+immutables | unavailable | unavailable | unavailable | unavailable | unavailable | parser-aware only until measured | No committed feature-scoped immutable-variable tester counter.
+
 ## Safer Frontend Starters
 
 These are acceptable autonomous tasks when they add focused fixtures and
