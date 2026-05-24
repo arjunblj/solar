@@ -3,7 +3,7 @@ pads_version: 2
 preset: compiler
 spec_status: active
 last_revised: "2026-05-23"
-revision_trigger: campaign_kickoff_2026_05_23
+revision_trigger: reset
 
 tier0:
   project:
