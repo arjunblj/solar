@@ -155,10 +155,14 @@ fn validate_standard_json_input(input: &serde_json::Value) -> Vec<serde_json::Va
 
 fn standard_json_error(error_type: &'static str, message: impl Into<String>) -> serde_json::Value {
     let message = message.into();
+    let formatted_message = format!("{error_type}: {message}");
     serde_json::json!({
         "component": "general",
+        // Standard JSON requires a stable diagnostic code field. These
+        // front-door validation diagnostics are Solar-specific and have no
+        // solc numeric code yet, so keep using the documented sentinel.
         "errorCode": "0",
-        "formattedMessage": message,
+        "formattedMessage": formatted_message,
         "message": message,
         "severity": "error",
         "type": error_type,
