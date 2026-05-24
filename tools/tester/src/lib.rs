@@ -52,7 +52,15 @@ pub fn run_tests(cmd: &'static Path) -> Result<()> {
     for &mode in modes {
         let cfg = MyConfig::<'static> { mode, tmp_dir };
         let config = config(cmd, &args, mode);
-        let mut baseline_mode = baseline.as_ref().map(|_| BaselineMode::new(mode, &config));
+        let typeck_counts = matches!(mode, Mode::SolcSolidityTypeck)
+            .then(|| BaselineCounts::scan(&config.root_dir, mode));
+        let mut baseline_mode = baseline.as_ref().map(|_| {
+            if let Some(counts) = &typeck_counts {
+                BaselineMode::new_with_counts(mode, &config, counts.clone())
+            } else {
+                BaselineMode::new(mode, &config)
+            }
+        });
 
         let text_emitter: Box<dyn ui_test::status_emitter::StatusEmitter> = args.format.into();
         let gha_emitter = ui_test::status_emitter::Gha { name: mode.to_string(), group: true };
@@ -68,6 +76,9 @@ pub fn run_tests(cmd: &'static Path) -> Result<()> {
 
         if let Some(mode) = &mut baseline_mode {
             mode.finish(result.is_ok(), started_at.elapsed());
+        }
+        if let Some(counts) = &typeck_counts {
+            print_typeck_summary(counts, result.is_ok());
         }
         if let (Some(baseline), Some(mode)) = (&mut baseline, baseline_mode) {
             baseline.modes.push(mode);
@@ -435,6 +446,10 @@ struct BaselineMode {
 
 impl BaselineMode {
     fn new(mode: Mode, config: &ui_test::Config) -> Self {
+        Self::new_with_counts(mode, config, BaselineCounts::scan(&config.root_dir, mode))
+    }
+
+    fn new_with_counts(mode: Mode, config: &ui_test::Config, counts: BaselineCounts) -> Self {
         let mut command = Vec::with_capacity(config.program.args.len() + 1);
         command.push(display_path(&config.program.program));
         command.extend(config.program.args.iter().map(|arg| arg.to_string_lossy().into_owned()));
@@ -443,7 +458,7 @@ impl BaselineMode {
             name: mode.to_str(),
             corpus_root: display_path(&config.root_dir),
             command,
-            counts: BaselineCounts::scan(&config.root_dir, mode),
+            counts,
             status: "not_run",
             elapsed_ms: 0,
         }
@@ -488,7 +503,7 @@ impl BaselineMode {
     }
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct BaselineCounts {
     total: u64,
     runnable: u64,
@@ -507,11 +522,15 @@ impl BaselineCounts {
         counts.runnable = counts
             .total
             .saturating_sub(counts.skip + counts.unsupported + counts.xfail + counts.unavailable);
-        if matches!(mode, Mode::SolcSolidityTypeck) {
-            counts.pass = Some(counts.runnable);
-            counts.fail = Some(0);
-        }
         counts
+    }
+
+    fn record_pass(&mut self) {
+        *self.pass.get_or_insert(0) += 1;
+    }
+
+    fn record_fail(&mut self) {
+        *self.fail.get_or_insert(0) += 1;
     }
 
     fn write_json(&self, json: &mut String) {
@@ -553,28 +572,48 @@ fn visit_baseline_files(path: &Path, mode: Mode, counts: &mut BaselineCounts) {
     counts.total += 1;
     match baseline_file_bucket(path, mode) {
         BaselineBucket::Runnable => {}
+        BaselineBucket::Pass => counts.record_pass(),
+        BaselineBucket::Fail => counts.record_fail(),
         BaselineBucket::Skip => counts.skip += 1,
         BaselineBucket::Unsupported => counts.unsupported += 1,
         BaselineBucket::Xfail => counts.xfail += 1,
+        BaselineBucket::Unavailable => counts.unavailable += 1,
     }
 }
 
 enum BaselineBucket {
     Runnable,
+    Pass,
+    Fail,
     Skip,
     Unsupported,
     Xfail,
+    Unavailable,
 }
 
 fn baseline_file_bucket(path: &Path, mode: Mode) -> BaselineBucket {
     match mode {
         Mode::Ui => BaselineBucket::Runnable,
         Mode::SolcSolidity => skip_result_bucket(solc::solidity::should_skip(path)),
-        Mode::SolcSolidityTypeck => {
-            typeck_skip_result_bucket(solc::solidity::should_skip_typeck(path))
-        }
+        Mode::SolcSolidityTypeck => typeck_baseline_file_bucket(path),
         Mode::SolcYul => skip_result_bucket(solc::yul::should_skip(path)),
     }
+}
+
+fn typeck_baseline_file_bucket(path: &Path) -> BaselineBucket {
+    if let Err(err) = solc::solidity::should_skip_typeck(path) {
+        return typeck_skip_result_bucket::<()>(Err(err));
+    }
+
+    match std::fs::read_to_string(path) {
+        Ok(src) if solc_typeck_expects_error(&src) => BaselineBucket::Fail,
+        Ok(_) => BaselineBucket::Pass,
+        Err(_) => BaselineBucket::Unavailable,
+    }
+}
+
+fn solc_typeck_expects_error(src: &str) -> bool {
+    errors::Error::load_solc(src).iter().any(errors::Error::is_error)
 }
 
 fn skip_result_bucket<T, E>(result: Result<T, E>) -> BaselineBucket {
@@ -590,6 +629,18 @@ fn typeck_skip_result_bucket<T>(result: Result<T, solc::FixtureReason>) -> Basel
     } else {
         BaselineBucket::Skip
     }
+}
+
+fn print_typeck_summary(counts: &BaselineCounts, passed: bool) {
+    eprintln!(
+        "solc-solidity-typeck categories: pass={} fail={} xfail={} unsupported={} \
+         (fail means solc-expected-error tests; unexpected_failures={})",
+        counts.pass.unwrap_or(0),
+        counts.fail.unwrap_or(0),
+        counts.xfail,
+        counts.unsupported,
+        if passed { "0; run exits 0" } else { "nonzero; run exits nonzero" },
+    );
 }
 
 fn first_output_line(output: &std::process::Output) -> Option<String> {
