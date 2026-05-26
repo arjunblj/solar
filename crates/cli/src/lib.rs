@@ -9,6 +9,7 @@ use clap::Parser as _;
 use solar_interface::{Result, Session};
 use solar_sema::CompilerRef;
 use std::{
+    collections::BTreeSet,
     io::{self, Read, Write},
     ops::ControlFlow,
 };
@@ -140,10 +141,14 @@ fn validate_standard_json_input(input: &serde_json::Value) -> Vec<serde_json::Va
         match settings.as_object() {
             Some(settings) => {
                 for setting in settings.keys() {
-                    errors.push(standard_json_error(
-                        "JSONError",
-                        format!("unsupported settings field: settings.{setting}"),
-                    ));
+                    if setting == "outputSelection" {
+                        validate_standard_json_output_selection(input, &mut errors);
+                    } else {
+                        errors.push(standard_json_error(
+                            "JSONError",
+                            format!("unsupported settings field: settings.{setting}"),
+                        ));
+                    }
                 }
             }
             None => errors.push(standard_json_error("JSONError", "settings must be an object")),
@@ -151,6 +156,82 @@ fn validate_standard_json_input(input: &serde_json::Value) -> Vec<serde_json::Va
     }
 
     errors
+}
+
+fn validate_standard_json_output_selection(
+    input: &serde_json::Map<String, serde_json::Value>,
+    errors: &mut Vec<serde_json::Value>,
+) {
+    let Some(output_selection) = input
+        .get("settings")
+        .and_then(|settings| settings.get("outputSelection"))
+    else {
+        return;
+    };
+
+    let Some(output_selection) = output_selection.as_object() else {
+        errors.push(standard_json_error(
+            "JSONError",
+            "settings.outputSelection must be an object",
+        ));
+        return;
+    };
+
+    let source_names = input
+        .get("sources")
+        .and_then(serde_json::Value::as_object)
+        .map(|sources| sources.keys().map(String::as_str).collect::<BTreeSet<_>>())
+        .unwrap_or_default();
+
+    for (source_name, contracts) in output_selection {
+        if source_name != "*" && !source_names.contains(source_name.as_str()) {
+            errors.push(standard_json_error(
+                "JSONError",
+                format!("settings.outputSelection references unknown source {source_name:?}"),
+            ));
+        }
+
+        let Some(contracts) = contracts.as_object() else {
+            errors.push(standard_json_error(
+                "JSONError",
+                format!("settings.outputSelection[{source_name:?}] must be an object"),
+            ));
+            continue;
+        };
+
+        for (contract_name, outputs) in contracts {
+            let Some(outputs) = outputs.as_array() else {
+                errors.push(standard_json_error(
+                    "JSONError",
+                    format!(
+                        "settings.outputSelection[{source_name:?}][{contract_name:?}] must be an array"
+                    ),
+                ));
+                continue;
+            };
+
+            for output in outputs {
+                let Some(output) = output.as_str() else {
+                    errors.push(standard_json_error(
+                        "JSONError",
+                        format!(
+                            "settings.outputSelection[{source_name:?}][{contract_name:?}] entries must be strings"
+                        ),
+                    ));
+                    continue;
+                };
+
+                if !matches!(output, "abi" | "evm.methodIdentifiers") {
+                    errors.push(standard_json_error(
+                        "JSONError",
+                        format!(
+                            "unsupported standard JSON outputSelection entry {output:?}; supported outputs: abi, evm.methodIdentifiers"
+                        ),
+                    ));
+                }
+            }
+        }
+    }
 }
 
 fn standard_json_error(error_type: &'static str, message: impl Into<String>) -> serde_json::Value {
