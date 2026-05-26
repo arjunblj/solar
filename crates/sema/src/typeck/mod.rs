@@ -17,6 +17,7 @@ use std::ops::ControlFlow;
 mod checker;
 mod override_checker;
 mod udvt;
+mod view_pure;
 
 pub(crate) fn check(gcx: Gcx<'_>) {
     parallel!(
@@ -41,6 +42,7 @@ pub(crate) fn check(gcx: Gcx<'_>) {
             }
             if gcx.sess.opts.unstable.typeck {
                 // TODO: Parallelize more.
+                view_pure::check(gcx, id);
                 checker::check(gcx, id);
             }
         }),
