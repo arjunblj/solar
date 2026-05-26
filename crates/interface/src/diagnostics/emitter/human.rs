@@ -162,7 +162,9 @@ impl HumanEmitter {
             HumanEmitterKind::Short => {
                 self.renderer = self.renderer.short_message(true);
             }
-            _ => unimplemented!("{kind:?}"),
+            _ => {
+                self.renderer = self.renderer.decor_style(DecorStyle::Unicode);
+            }
         }
         self
     }

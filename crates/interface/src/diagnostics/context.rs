@@ -191,7 +191,14 @@ impl DiagCtxt {
                     .terminal_width(opts.diagnostic_width);
                 Box::new(json)
             }
-            format => unimplemented!("{format:?}"),
+            _format => {
+                let human = HumanEmitter::stderr(opts.color)
+                    .source_map(Some(source_map))
+                    .ui_testing(opts.unstable.ui_testing)
+                    .human_kind(opts.error_format_human)
+                    .terminal_width(opts.diagnostic_width);
+                Box::new(human)
+            }
         };
         Self::new(emitter).with_flags(|flags| flags.update_from_opts(opts))
     }
@@ -580,5 +587,21 @@ impl DiagCtxtInner {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(not(feature = "json"))]
+    #[test]
+    fn json_error_format_falls_back_instead_of_panicking_without_json_feature() {
+        let opts = Opts { error_format: ErrorFormat::Json, ..Opts::default() };
+        let dcx = DiagCtxt::from_opts(&opts);
+
+        let _guarantee = dcx.err("json diagnostics are fallback-rendered").emit();
+
+        assert_eq!(dcx.err_count(), 1);
     }
 }
