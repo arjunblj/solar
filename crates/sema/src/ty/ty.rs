@@ -254,7 +254,11 @@ impl<'gcx> Ty<'gcx> {
     pub fn is_value_type(self) -> bool {
         match self.kind {
             TyKind::Elementary(t) => t.is_value_type(),
-            TyKind::Contract(_) | TyKind::Fn(_) | TyKind::Enum(_) | TyKind::Udvt(..) => true,
+            TyKind::Contract(_)
+            | TyKind::Super(_)
+            | TyKind::Fn(_)
+            | TyKind::Enum(_)
+            | TyKind::Udvt(..) => true,
             _ => false,
         }
     }
@@ -420,6 +424,7 @@ impl<'gcx> Ty<'gcx> {
             | TyKind::StringLiteral(..)
             | TyKind::IntLiteral(..)
             | TyKind::Contract(_)
+            | TyKind::Super(_)
             | TyKind::Fn(_)
             | TyKind::Enum(_)
             | TyKind::Module(_)
@@ -469,6 +474,7 @@ impl<'gcx> Ty<'gcx> {
             | TyKind::StringLiteral(..)
             | TyKind::IntLiteral(..)
             | TyKind::Contract(_)
+            | TyKind::Super(_)
             | TyKind::Fn(_)
             | TyKind::Enum(_)
             | TyKind::Module(_)
@@ -710,6 +716,8 @@ impl<'gcx> Ty<'gcx> {
                     Result::Err(TyConvertError::NonDerivedContract)
                 }
             }
+            (Super(_), _) | (_, Super(_)) => Result::Err(TyConvertError::Incompatible),
+
             // byte literal -> bytesN/bytes
             // See: <https://docs.soliditylang.org/en/latest/types.html#index-34>
             (StringLiteral(_, _), Elementary(Bytes)) => Ok(()),
@@ -803,7 +811,7 @@ impl<'gcx> Ty<'gcx> {
                     }
                     return Result::Err(TyConvertError::Incompatible);
                 }
-                if from_fn.kind != to_fn.kind {
+                if from_fn.kind != to_fn.kind && !(from_fn.is_internal() && to_fn.is_internal()) {
                     return Result::Err(TyConvertError::Incompatible);
                 }
                 // Parameter and return types must match exactly (no implicit conversion).
@@ -834,6 +842,18 @@ impl<'gcx> Ty<'gcx> {
                     _ => false,
                 };
                 if mutability_ok { Ok(()) } else { Result::Err(TyConvertError::Incompatible) }
+            }
+
+            // Tuple conversions: element-wise implicit conversion with same length.
+            // See: <https://docs.soliditylang.org/en/latest/types.html#tuple-types>
+            (Tuple(from_tys), Tuple(to_tys)) => {
+                if from_tys.len() != to_tys.len() {
+                    return Result::Err(TyConvertError::Incompatible);
+                }
+                for (&from_ty, &to_ty) in std::iter::zip(from_tys, to_tys) {
+                    from_ty.try_convert_implicit_to(to_ty, gcx)?;
+                }
+                Ok(())
             }
 
             _ => Result::Err(TyConvertError::Incompatible),
@@ -940,6 +960,7 @@ impl<'gcx> Ty<'gcx> {
                     Result::Err(TyConvertError::NonDerivedContract)
                 }
             }
+            (Super(_), _) | (_, Super(_)) => Result::Err(TyConvertError::InvalidConversion),
 
             // Contract -> address (always allowed)
             (Contract(_), Elementary(Address(false))) => Ok(()),
@@ -1143,6 +1164,9 @@ pub enum TyKind<'gcx> {
     /// Contract.
     Contract(hir::ContractId),
 
+    /// The `super` type for a contract.
+    Super(hir::ContractId),
+
     /// A struct.
     ///
     /// Cannot contain the types of its fields because it can be recursive.
@@ -1201,6 +1225,10 @@ pub struct TyFn<'gcx> {
 pub enum TyFnKind {
     /// An ordinary internal function value.
     Internal,
+    /// An internal function value for a public function accessed through a qualified name.
+    ///
+    /// It is callable as an internal function, but also has a `.selector` member.
+    InternalWithSelector,
     /// An ordinary external function value.
     External,
     /// A function declaration accessed through a contract type, e.g. `C.f`.
@@ -1229,7 +1257,7 @@ impl<'gcx> TyFn<'gcx> {
     /// Returns whether this is an internal function value.
     #[inline]
     pub fn is_internal(&self) -> bool {
-        self.kind == TyFnKind::Internal
+        matches!(self.kind, TyFnKind::Internal | TyFnKind::InternalWithSelector)
     }
 
     /// Returns whether this is an external function value.
@@ -1274,7 +1302,13 @@ impl<'gcx> TyFn<'gcx> {
     /// Returns whether this function value has a `.selector` member.
     #[inline]
     pub fn has_selector(&self) -> bool {
-        matches!(self.kind, TyFnKind::External | TyFnKind::Declaration | TyFnKind::DelegateCall)
+        matches!(
+            self.kind,
+            TyFnKind::InternalWithSelector
+                | TyFnKind::External
+                | TyFnKind::Declaration
+                | TyFnKind::DelegateCall
+        )
     }
 
     /// Returns whether this function value has an `.address` member.
@@ -1313,6 +1347,7 @@ impl TyFlags {
             | TyKind::StringLiteral(..)
             | TyKind::IntLiteral(..)
             | TyKind::Contract(_)
+            | TyKind::Super(_)
             | TyKind::Enum(_)
             | TyKind::Struct(_)
             | TyKind::Module(_)
