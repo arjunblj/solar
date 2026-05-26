@@ -191,7 +191,14 @@ impl DiagCtxt {
                     .terminal_width(opts.diagnostic_width);
                 Box::new(json)
             }
-            format => unimplemented!("{format:?}"),
+            _ => {
+                let human = HumanEmitter::stderr(opts.color)
+                    .source_map(Some(source_map))
+                    .ui_testing(opts.unstable.ui_testing)
+                    .human_kind(opts.error_format_human)
+                    .terminal_width(opts.diagnostic_width);
+                Box::new(human)
+            }
         };
         Self::new(emitter).with_flags(|flags| flags.update_from_opts(opts))
     }
