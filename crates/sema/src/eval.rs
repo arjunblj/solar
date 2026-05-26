@@ -288,7 +288,13 @@ impl IntScalar {
             }
             Shl => self.checked_shl(r)?,
             Sar => return Err(EE::UnsupportedBinaryOp),
-            Lt | Le | Gt | Ge | Eq | Ne | Or | And => return Err(EE::UnsupportedBinaryOp),
+            Lt => Self::from_bool(self.data < r.data),
+            Le => Self::from_bool(self.data <= r.data),
+            Gt => Self::from_bool(self.data > r.data),
+            Ge => Self::from_bool(self.data >= r.data),
+            Eq => Self::from_bool(self.data == r.data),
+            Ne => Self::from_bool(self.data != r.data),
+            Or | And => return Err(EE::UnsupportedBinaryOp),
         })
     }
 

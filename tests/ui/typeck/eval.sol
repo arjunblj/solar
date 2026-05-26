@@ -5,6 +5,11 @@ uint constant rec2 = rec1;
 
 uint constant bigLiteral = 115792089237316195423570985008687907853269984665640564039457584007913129639935;
 
+bool constant cmpTrue = 1 < 2;
+bool constant cmpFalse = 2 < 1;
+bool constant cmpEqual = 1 + 1 == 2;
+bool constant cmpOrdering = 3 >= 3;
+
 uint constant fails = 0 / 0;
 
 contract C {
